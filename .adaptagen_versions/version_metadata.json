@@ -1,0 +1,25 @@
+{
+  "versions": [
+    {
+      "version": "0.0.1-r1",
+      "timestamp": "20250309214930",
+      "hash": "6dda32160829d754f71f9ce356fbdfaba2e98b57948e3a3feb9f792c03d5d406",
+      "filename": "adaptagen_0_0_1_r1_20250309214930.py",
+      "path": ".adaptagen_versions\\adaptagen_0_0_1_r1_20250309214930.py"
+    },
+    {
+      "version": "0.0.1-r2",
+      "timestamp": "20250309215006",
+      "hash": "4a82e7b1c2dd4874c32a37e76e0a06ecbf82c03cf36744e545f4b646c2c44f52",
+      "filename": "adaptagen_0_0_1_r2_20250309215006.py",
+      "path": ".adaptagen_versions\\adaptagen_0_0_1_r2_20250309215006.py"
+    }
+  ],
+  "latest_version": {
+    "version": "0.0.1-r2",
+    "timestamp": "20250309215006",
+    "hash": "4a82e7b1c2dd4874c32a37e76e0a06ecbf82c03cf36744e545f4b646c2c44f52",
+    "filename": "adaptagen_0_0_1_r2_20250309215006.py",
+    "path": ".adaptagen_versions\\adaptagen_0_0_1_r2_20250309215006.py"
+  }
+}
