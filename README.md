@@ -1,87 +1,104 @@
 # AdaptaGen
 
-A self-modifying Python script that uses the Gemini API to read and improve its own code.
+A self-modifying AI agent using the Gemini API with version control.
 
 ## Overview
 
-AdaptaGen is a Python script that can:
-1. Read its own source code
-2. Use the Gemini API to generate improved versions of itself
-3. Write the new version to a file
-4. Follow SOLID, DRY, PEP 8, and KISS principles
-5. Track its own evolution with built-in version control
+AdaptaGen is a Python-based AI agent that can modify and improve its own code. It uses the Gemini API to generate improvements and implements a version control system to track changes.
 
-The initial goal of AdaptaGen is to make controlled edits to itself, but this can be extended to other goals by implementing new Goal classes.
+## Features
 
-## Requirements
-
-- Python 3.7+
-- Google Gemini API key
+- **Self-Modification**: The agent can modify and improve its own code.
+- **Version Control**: Tracks changes and maintains a history of versions.
+- **Incremental Editing**: Can edit code component by component instead of regenerating the entire codebase.
+- **Goal-Based Improvements**: Supports different improvement goals (performance, documentation, features).
+- **Learning Database**: Learns from past improvements to make better edits in the future.
+- **Error Handling**: Robust error handling and recovery mechanisms.
+- **Code Validation**: Validates generated code for common issues.
 
 ## Installation
 
-1. Clone this repository:
-   ```
-   git clone https://github.com/yourusername/AdaptaGen.git
-   cd AdaptaGen
-   ```
+```bash
+# Clone the repository
+git clone https://github.com/yourusername/adaptagen.git
+cd adaptagen
 
-2. Install the required dependencies:
-   ```
-   pip install -r requirements.txt
-   ```
-
-3. Create a `.env` file in the project directory with your Gemini API key:
-   ```
-   GEMINI_API_KEY=your_api_key_here
-   ```
+# Install the package
+pip install -e .
+```
 
 ## Usage
 
 ### Basic Usage
 
-Run the script to generate an improved version:
-```
-python adaptagen_0_0_1_r1.py
-```
+```bash
+# Run with default settings (incremental revision)
+adaptagen
 
-The script will:
-1. Read its own source code
-2. Generate an improved version using the Gemini API
-3. Write the new version to a file with an incremented version number
-4. Save the version history in the `.adaptagen_versions` directory
+# Run with incremental editing
+adaptagen --incremental
 
-### Version Control Commands
+# Run with a specific goal
+adaptagen --goal "documentation"
 
-List all versions in the version history:
-```
-python adaptagen_0_0_1_r1.py list-versions
-```
+# Run in patient mode with extended backoff times
+adaptagen --patient
 
-Run with a specific version increment type:
-```
-python adaptagen_0_0_1_r1.py run [increment_type]
+# Limit the number of components to process
+adaptagen --max-components 5
 ```
 
-Where `increment_type` can be:
-- `major` - Increment the major version (X.0.0-r0)
-- `minor` - Increment the minor version (0.X.0-r0)
-- `patch` - Increment the patch version (0.0.X-r0)
-- `revision` - Increment the revision number (0.0.0-rX) [default]
+### Advanced Usage
 
-## Version Control System
+```bash
+# List all versions
+adaptagen --list-versions
 
-AdaptaGen includes a basic version control system that:
+# Generate a report on learned information
+adaptagen --report
 
-1. Tracks all versions of the script
-2. Stores version history in the `.adaptagen_versions` directory
-3. Maintains metadata about each version (timestamp, hash, etc.)
-4. Automatically increments version numbers
-5. Allows listing and retrieving previous versions
+# Run in test mode without making changes
+adaptagen --test
 
-## Configuration
+# Create a new version based on the latest working version
+adaptagen --create-new
 
-You can configure the following parameters in the `.env` file:
+# Fix a specific version
+adaptagen --fix-with "0.0.2-r1" --fix-target "0.0.2-r2"
+
+# Analyze code for improvements
+adaptagen --analyze
+
+# Analyze a specific file
+adaptagen --analyze-file "path/to/file.py"
+```
+
+## Project Structure
+
+The project is organized into modules:
+
+- `adaptagen/core/`: Core functionality
+  - `adaptagen.py`: Main AdaptaGen class
+  - `config.py`: Configuration management
+- `adaptagen/modules/`: Individual modules
+  - `api_client.py`: Gemini API interaction
+  - `code_manager.py`: Code reading, writing, and manipulation
+  - `code_validator.py`: Code validation and fixing
+  - `goal_system.py`: Goal management
+  - `incremental_editor.py`: Incremental editing
+  - `learning_db.py`: Learning database
+  - `token_system.py`: Token management
+  - `version_control.py`: Version control
+
+## Requirements
+
+- Python 3.8+
+- Google Generative AI Python SDK
+- Python-dotenv
+
+## Environment Variables
+
+Create a `.env` file with the following variables:
 
 ```
 GEMINI_API_KEY=your_api_key_here
@@ -92,24 +109,6 @@ TOP_P=0.95
 TOP_K=40
 ```
 
-## Extending AdaptaGen
-
-### Adding New Goals
-
-To add new goals for self-modification:
-
-1. Create a new class that inherits from the `Goal` abstract base class
-2. Implement the `get_description()` and `get_prompt()` methods
-3. Update the `AdaptaGen` class to use your new goal
-
-### Enhancing Version Control
-
-The version control system can be extended by:
-
-1. Adding methods to the `CodeManager` class for more advanced version management
-2. Implementing version comparison and diff functionality
-3. Adding rollback capabilities to revert to previous versions
-
 ## License
 
-MIT 
+MIT License 
