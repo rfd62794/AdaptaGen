@@ -13,13 +13,27 @@
       "hash": "4a82e7b1c2dd4874c32a37e76e0a06ecbf82c03cf36744e545f4b646c2c44f52",
       "filename": "adaptagen_0_0_1_r2_20250309215006.py",
       "path": ".adaptagen_versions\\adaptagen_0_0_1_r2_20250309215006.py"
+    },
+    {
+      "version": "0.0.1-r2",
+      "timestamp": "20250309215511",
+      "hash": "4e96e51aeed738e64ff9bb8d70675e156fc81d312a804eb717b2d067b1f941bd",
+      "filename": "adaptagen_0_0_1_r2_20250309215511.py",
+      "path": ".adaptagen_versions\\adaptagen_0_0_1_r2_20250309215511.py"
+    },
+    {
+      "version": "0.0.1-r3",
+      "timestamp": "20250309215547",
+      "hash": "138aceb3e5922e90e162904138a7ee89a7c5949a1e36667720bc73ad384effd2",
+      "filename": "adaptagen_0_0_1_r3_20250309215547.py",
+      "path": ".adaptagen_versions\\adaptagen_0_0_1_r3_20250309215547.py"
     }
   ],
   "latest_version": {
-    "version": "0.0.1-r2",
-    "timestamp": "20250309215006",
-    "hash": "4a82e7b1c2dd4874c32a37e76e0a06ecbf82c03cf36744e545f4b646c2c44f52",
-    "filename": "adaptagen_0_0_1_r2_20250309215006.py",
-    "path": ".adaptagen_versions\\adaptagen_0_0_1_r2_20250309215006.py"
+    "version": "0.0.1-r3",
+    "timestamp": "20250309215547",
+    "hash": "138aceb3e5922e90e162904138a7ee89a7c5949a1e36667720bc73ad384effd2",
+    "filename": "adaptagen_0_0_1_r3_20250309215547.py",
+    "path": ".adaptagen_versions\\adaptagen_0_0_1_r3_20250309215547.py"
   }
 }
