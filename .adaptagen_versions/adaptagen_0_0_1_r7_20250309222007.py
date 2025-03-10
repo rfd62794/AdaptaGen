@@ -1,16 +1,9 @@
 """
 AdaptaGen: A self-modifying Python script using the Gemini API with version control.
 
-Version: 0.0.1-r8
+Version: 0.0.1-r7
 
-Enhancements in r8:
-1. Added intelligent rate limit handling:
-   - Implements exponential backoff for 429 errors
-   - Automatically retries requests after appropriate waiting periods
-   - Preserves API quota by adapting to service limitations
-   - Maintains state between requests to optimize retry behavior
-
-Previous enhancements:
+Enhancements in r7:
 1. Added comprehensive code validation to check for common issues in generated code:
    - Syntax errors
    - "...existing code" placeholders
@@ -35,10 +28,8 @@ Previous enhancements:
    - Added specific guidelines to prevent common issues
    - Created enhanced prompts that address specific problems
 
-5. Added advanced incremental editing approach:
-   - Edits the same file in-place with automatic backups
-   - Uses timed backoff strategy instead of fixed retry count
-   - Implements multiple editing approaches when initial attempts fail
+5. Added incremental editing approach:
+   - Clones itself and makes controlled edits to specific components
    - Verifies each edit works before proceeding to the next
    - Tests functionality after each edit
    - Provides detailed statistics on successful and failed edits
@@ -78,7 +69,7 @@ ENV_TOP_K = "TOP_K"
 DEFAULT_TOP_K = 40
 
 # Version control constants
-VERSION = "0.0.1-r8"
+VERSION = "0.0.1-r7"
 VERSION_HISTORY_DIR = Path(".adaptagen_versions")
 VERSION_METADATA_FILE = "version_metadata.json"
 
@@ -728,11 +719,6 @@ class GeminiAPI:
             model_name=config.model_name,
             generation_config=config.get_generation_config()
         )
-        
-        # Rate limiting parameters
-        self.rate_limit_encountered = False
-        self.rate_limit_backoff = [5, 10, 30, 60, 120, 300, 600]  # Exponential backoff in seconds
-        self.rate_limit_attempt = 0
     
     def generate_response(self, prompt: str) -> Optional[str]:
         """Generate a response from the AI model based on the given prompt."""
@@ -745,19 +731,7 @@ class GeminiAPI:
             # Replace valid tokens
             prompt = TokenRegistry.replace_tokens(prompt)
             
-            # If we've hit rate limits before, apply backoff
-            if self.rate_limit_encountered and self.rate_limit_attempt < len(self.rate_limit_backoff):
-                backoff_time = self.rate_limit_backoff[self.rate_limit_attempt]
-                logger.info(f"Rate limit previously encountered. Backing off for {backoff_time} seconds before trying again.")
-                import time
-                time.sleep(backoff_time)
-            
             response = self.model.generate_content(prompt)
-            
-            # Reset rate limit flags on successful request
-            self.rate_limit_encountered = False
-            self.rate_limit_attempt = 0
-            
             code = response.text
             
             # Check for incomplete code and fix if possible
@@ -765,27 +739,6 @@ class GeminiAPI:
             
             return code
         except Exception as e:
-            error_str = str(e)
-            
-            # Handle rate limiting errors (429)
-            if "429" in error_str and "Resource has been exhausted" in error_str:
-                self.rate_limit_encountered = True
-                
-                if self.rate_limit_attempt < len(self.rate_limit_backoff):
-                    backoff_time = self.rate_limit_backoff[self.rate_limit_attempt]
-                    logger.warning(f"Rate limit encountered (429). Backing off for {backoff_time} seconds and retrying.")
-                    
-                    import time
-                    time.sleep(backoff_time)
-                    
-                    # Increment for next time
-                    self.rate_limit_attempt += 1
-                    
-                    # Recursive retry after backoff
-                    return self.generate_response(prompt)
-                else:
-                    logger.error(f"Rate limit (429) exceeded maximum retry attempts ({len(self.rate_limit_backoff)})")
-            
             logger.error(f"Gemini API error: {e}")
             return None
             
@@ -1049,87 +1002,50 @@ class IncrementalEditor:
     """
     
     def __init__(self, original_code: str, code_manager: CodeManager, 
-                 version_control: VersionControl, gemini_api: GeminiAPI,
-                 target_file: Path = None):
+                 version_control: VersionControl, gemini_api: GeminiAPI):
         """Initialize the incremental editor."""
         self.original_code = original_code
         self.current_code = original_code
         self.code_manager = code_manager
         self.version_control = version_control
         self.gemini_api = gemini_api
-        self.target_file = target_file
         self.edit_history = []
         self.successful_edits = 0
         self.failed_edits = 0
-        self.backoff_times = [1, 2, 5, 10, 30, 60]  # Backoff times in seconds
-        self.edit_approaches = [
-            self._approach_standard_edit,
-            self._approach_simplified_edit,
-            self._approach_conservative_edit,
-            self._approach_focused_bugfix
-        ]
         
-    def get_component_edit_prompt(self, component_name: str, component_code: str, 
-                                  approach: str = "standard") -> str:
+    def get_component_edit_prompt(self, component_name: str, component_code: str) -> str:
         """
         Generate a prompt for editing a specific component.
         
         Args:
             component_name: Name of the component to edit
             component_code: Code of the component to edit
-            approach: Editing approach to use
             
         Returns:
             Prompt for editing the component
         """
-        base_prompt = f"""
+        return f"""
         Improve the following {component_name} component from a Python script:
 
         ```python
         {component_code}
         ```
-        """
-        
-        if approach == "standard":
-            focus = """
-            Focus on:
-            1. Improving functionality and robustness
-            2. Better error handling
-            3. Code clarity and documentation
-            4. Performance optimizations if applicable
-            """
-        elif approach == "simplified":
-            focus = """
-            Focus on:
-            1. Simplifying the code while maintaining functionality
-            2. Removing unnecessary complexity
-            3. Making the code more readable
-            """
-        elif approach == "conservative":
-            focus = """
-            Focus on:
-            1. Making minimal changes to fix obvious issues
-            2. Improving comments and documentation
-            3. DO NOT change the core logic or structure
-            """
-        elif approach == "bugfix":
-            focus = """
-            Focus ONLY on:
-            1. Fixing bugs and edge cases
-            2. Improving error handling
-            3. DO NOT add new features or change existing functionality
-            """
-        
-        guidelines = """
+
+        Focus on:
+        1. Improving functionality and robustness
+        2. Better error handling
+        3. Code clarity and documentation
+        4. Performance optimizations if applicable
+
         IMPORTANT:
         1. Return ONLY the improved component code, nothing else
         2. Maintain the same function/method signatures
         3. Ensure the code is syntactically correct
         4. Do not change the component's core purpose
         5. Do not add dependencies on components that don't exist
+
+        Return the complete improved component code.
         """
-        
-        return base_prompt + focus + guidelines + "\n\nReturn the complete improved component code."
     
     def extract_components(self) -> Dict[str, str]:
         """
@@ -1259,106 +1175,6 @@ class IncrementalEditor:
             logger.error(f"Error testing code functionality: {e}")
             return False
     
-    def _approach_standard_edit(self, component_name: str, component_code: str) -> str:
-        """Standard editing approach."""
-        prompt = self.get_component_edit_prompt(component_name, component_code, "standard")
-        return self.gemini_api.generate_response(prompt)
-    
-    def _approach_simplified_edit(self, component_name: str, component_code: str) -> str:
-        """Simplified editing approach focusing on readability."""
-        prompt = self.get_component_edit_prompt(component_name, component_code, "simplified")
-        return self.gemini_api.generate_response(prompt)
-    
-    def _approach_conservative_edit(self, component_name: str, component_code: str) -> str:
-        """Conservative editing approach with minimal changes."""
-        prompt = self.get_component_edit_prompt(component_name, component_code, "conservative")
-        return self.gemini_api.generate_response(prompt)
-    
-    def _approach_focused_bugfix(self, component_name: str, component_code: str) -> str:
-        """Focused bug-fixing approach."""
-        prompt = self.get_component_edit_prompt(component_name, component_code, "bugfix")
-        return self.gemini_api.generate_response(prompt)
-    
-    def try_edit_component(self, component_name: str, component_code: str) -> Tuple[bool, str]:
-        """
-        Try to edit a component using multiple approaches with timed backoff.
-        
-        Args:
-            component_name: Name of the component to edit
-            component_code: Code of the component to edit
-            
-        Returns:
-            Tuple of (success, new_code)
-        """
-        import time
-        
-        # Try each approach
-        for approach_idx, approach_func in enumerate(self.edit_approaches):
-            logger.info(f"Trying approach {approach_idx+1}/{len(self.edit_approaches)} for {component_name}")
-            
-            # Try with backoff
-            for attempt, backoff_time in enumerate(self.backoff_times):
-                logger.info(f"Attempt {attempt+1}/{len(self.backoff_times)} with {backoff_time}s backoff")
-                
-                # Generate improved component
-                improved_component = approach_func(component_name, component_code)
-                
-                # If we got None back, it might be due to rate limiting which is already handled
-                # by the GeminiAPI class with its own backoff strategy. In this case, we should
-                # pause our attempts for a while to let the rate limit reset.
-                if not improved_component:
-                    # Check if the API client has encountered rate limits
-                    if self.gemini_api.rate_limit_encountered:
-                        logger.warning(f"Rate limit encountered while processing {component_name}. Pausing component editing.")
-                        
-                        # Wait longer than the API's own backoff to ensure we're not hammering the API
-                        extended_wait = 600  # 10 minutes
-                        logger.info(f"Waiting {extended_wait} seconds before trying another component...")
-                        time.sleep(extended_wait)
-                        
-                        # Skip to the next component rather than continuing to retry this one
-                        return False, self.current_code
-                    
-                    logger.warning(f"Failed to generate improved version for {component_name}")
-                    time.sleep(backoff_time)
-                    continue
-                
-                # Replace component in the code
-                new_code = self.replace_component(component_name, improved_component)
-                
-                # Verify the new code
-                if self.verify_code(new_code):
-                    logger.info(f"Successfully improved component: {component_name}")
-                    return True, new_code
-                
-                logger.warning(f"Verification failed for {component_name}, backing off for {backoff_time}s")
-                time.sleep(backoff_time)
-            
-            # If we've tried all backoff times with this approach and failed, try the next approach
-            logger.warning(f"All attempts with approach {approach_idx+1} failed for {component_name}")
-        
-        # If all approaches failed, return failure
-        logger.error(f"All approaches failed for {component_name}")
-        return False, self.current_code
-    
-    def save_current_code(self, version_suffix: str = None) -> None:
-        """
-        Save the current code to the target file and version history.
-        
-        Args:
-            version_suffix: Optional suffix to add to the version
-        """
-        if self.target_file:
-            # Save to the target file
-            self.code_manager.write_code(self.target_file, self.current_code)
-            logger.info(f"Saved current code to {self.target_file}")
-            
-            # Save to version history
-            timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
-            version = f"{VERSION}-{version_suffix}_{timestamp}" if version_suffix else f"{VERSION}-{timestamp}"
-            self.version_control.save_version(self.current_code, version)
-            logger.info(f"Saved version {version} to version history")
-    
     def run_incremental_edit(self, version_suffix: str = "incremental") -> str:
         """
         Run the incremental editing process.
@@ -1378,60 +1194,43 @@ class IncrementalEditor:
         # Sort components by size (smaller first for faster iterations)
         sorted_components = sorted(components.items(), key=lambda x: len(x[1]))
         
-        # Track rate limit occurrences
-        rate_limit_count = 0
-        max_rate_limit_threshold = 3  # After this many rate limits, we'll change strategy
-        
         # Process each component
-        component_index = 0
-        while component_index < len(sorted_components):
-            component_name, component_code = sorted_components[component_index]
-            logger.info(f"Processing component: {component_name} ({component_index+1}/{len(sorted_components)})")
+        for component_name, component_code in sorted_components:
+            logger.info(f"Processing component: {component_name}")
             
-            # Check if we've hit too many rate limits and should adjust strategy
-            if rate_limit_count >= max_rate_limit_threshold:
-                logger.warning(f"Hit rate limit threshold ({max_rate_limit_threshold}). Switching to conservative approach only.")
-                # Override the edit approaches to only use the most conservative one
-                self.edit_approaches = [self._approach_conservative_edit]
+            # Generate prompt for this component
+            prompt = self.get_component_edit_prompt(component_name, component_code)
+            
+            # Get improved component
+            improved_component = self.gemini_api.generate_response(prompt)
+            
+            if not improved_component:
+                logger.warning(f"Failed to generate improved version for {component_name}")
+                self.failed_edits += 1
+                continue
                 
-                # Also increase the backoff times
-                self.backoff_times = [60, 300, 600]  # 1 min, 5 min, 10 min
-                
-                # Reset the counter so we don't keep logging this
-                rate_limit_count = 0
+            # Replace component in the code
+            new_code = self.replace_component(component_name, improved_component)
             
-            # Try to edit the component
-            success, new_code = self.try_edit_component(component_name, component_code)
-            
-            # Check if we hit a rate limit
-            if self.gemini_api.rate_limit_encountered:
-                rate_limit_count += 1
-                
-                # If we've hit multiple rate limits, start skipping components
-                if rate_limit_count >= 2:
-                    # Skip ahead to process only every Nth component
-                    skip_factor = rate_limit_count
-                    next_index = component_index + skip_factor
-                    
-                    if next_index < len(sorted_components):
-                        logger.warning(f"Multiple rate limits encountered. Skipping ahead to component {next_index+1}.")
-                        component_index = next_index
-                        continue
-            
-            if success:
+            # Verify the new code
+            if self.verify_code(new_code):
+                logger.info(f"Successfully improved component: {component_name}")
                 self.current_code = new_code
                 self.successful_edits += 1
                 
-                # Save the current state
-                self.save_current_code(f"{version_suffix}_{component_name}")
+                # Save this intermediate version
+                timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
+                intermediate_version = f"{version_suffix}_{component_name}_{timestamp}"
+                self.version_control.save_version(new_code, intermediate_version)
                 
                 # Record successful edit
                 self.edit_history.append({
                     "component": component_name,
                     "status": "success",
-                    "timestamp": datetime.datetime.now().strftime("%Y%m%d%H%M%S")
+                    "timestamp": timestamp
                 })
             else:
+                logger.warning(f"Verification failed for improved component: {component_name}")
                 self.failed_edits += 1
                 
                 # Record failed edit
@@ -1440,9 +1239,6 @@ class IncrementalEditor:
                     "status": "failed",
                     "timestamp": datetime.datetime.now().strftime("%Y%m%d%H%M%S")
                 })
-            
-            # Move to the next component
-            component_index += 1
         
         logger.info(f"Incremental editing completed. Successful edits: {self.successful_edits}, Failed edits: {self.failed_edits}")
         return self.current_code
@@ -1488,59 +1284,31 @@ class AdaptaGen:
         if use_incremental:
             # Use incremental editing approach
             logger.info("Using incremental editing approach")
-            
-            # Determine the target file path
-            target_filepath = current_filepath
-            
-            # Create a backup of the current file
-            backup_filepath = Path(f"{current_filepath}.bak")
-            try:
-                import shutil
-                shutil.copy2(current_filepath, backup_filepath)
-                logger.info(f"Created backup at {backup_filepath}")
-            except Exception as e:
-                logger.error(f"Failed to create backup: {e}")
-                return
-            
-            # Initialize the incremental editor with the target file
             incremental_editor = IncrementalEditor(
                 current_code, 
                 self.code_manager, 
                 self.version_control,
-                self.gemini_api,
-                target_filepath
+                self.gemini_api
             )
             
-            try:
-                # Run incremental editing
-                improved_code = incremental_editor.run_incremental_edit(new_version)
+            # Run incremental editing
+            improved_code = incremental_editor.run_incremental_edit(new_version)
+            
+            # Update version in code
+            improved_code = self.version_manager.update_version_in_code(improved_code, new_version)
+            
+            # Write the new version to a file
+            new_filepath = Path(f"adaptagen_{new_version.replace('.', '_').replace('-', '_')}.py")
+            if self.code_manager.write_code(new_filepath, improved_code):
+                logger.info(f"New version {new_version} written to: {new_filepath}")
                 
-                # Update version in code
-                improved_code = self.version_manager.update_version_in_code(improved_code, new_version)
+                # Save to version history
+                self.version_control.save_version(improved_code, new_version)
                 
-                # Write the final version back to the same file
-                if self.code_manager.write_code(target_filepath, improved_code):
-                    logger.info(f"Successfully updated {target_filepath} with version {new_version}")
-                    
-                    # Save to version history
-                    self.version_control.save_version(improved_code, new_version)
-                    
-                    # Log statistics
-                    logger.info(f"Incremental editing statistics: {incremental_editor.successful_edits} successful edits, {incremental_editor.failed_edits} failed edits")
-                else:
-                    logger.error(f"Failed to write to {target_filepath}")
-                    self._restore_backup(backup_filepath, target_filepath)
-            except Exception as e:
-                logger.error(f"Error during incremental editing: {e}")
-                self._restore_backup(backup_filepath, target_filepath)
-            finally:
-                # Clean up backup if everything went well
-                if backup_filepath.exists() and incremental_editor.successful_edits > 0:
-                    try:
-                        backup_filepath.unlink()
-                        logger.info(f"Removed backup file {backup_filepath}")
-                    except Exception as e:
-                        logger.warning(f"Failed to remove backup file: {e}")
+                # Log statistics
+                logger.info(f"Incremental editing statistics: {incremental_editor.successful_edits} successful edits, {incremental_editor.failed_edits} failed edits")
+            else:
+                logger.error("Failed to write new version.")
             
             return
         
@@ -1657,25 +1425,6 @@ class AdaptaGen:
                     # If we're out of retries, save the problematic code and exit
                     self.version_control.save_version(improved_code, f"{new_version}-syntax_error")
                     return
-    
-    def _restore_backup(self, backup_filepath: Path, target_filepath: Path) -> None:
-        """
-        Restore from backup if something goes wrong.
-        
-        Args:
-            backup_filepath: Path to the backup file
-            target_filepath: Path to the target file to restore
-        """
-        try:
-            if backup_filepath.exists():
-                import shutil
-                shutil.copy2(backup_filepath, target_filepath)
-                logger.info(f"Restored from backup {backup_filepath}")
-                
-                # Remove the backup
-                backup_filepath.unlink()
-        except Exception as e:
-            logger.error(f"Failed to restore from backup: {e}")
     
     def list_versions(self) -> None:
         """List all versions in the version history."""

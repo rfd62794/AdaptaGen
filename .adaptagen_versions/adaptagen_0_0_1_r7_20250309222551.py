@@ -1,16 +1,9 @@
 """
 AdaptaGen: A self-modifying Python script using the Gemini API with version control.
 
-Version: 0.0.1-r8
+Version: 0.0.1-r7
 
-Enhancements in r8:
-1. Added intelligent rate limit handling:
-   - Implements exponential backoff for 429 errors
-   - Automatically retries requests after appropriate waiting periods
-   - Preserves API quota by adapting to service limitations
-   - Maintains state between requests to optimize retry behavior
-
-Previous enhancements:
+Enhancements in r7:
 1. Added comprehensive code validation to check for common issues in generated code:
    - Syntax errors
    - "...existing code" placeholders
@@ -78,7 +71,7 @@ ENV_TOP_K = "TOP_K"
 DEFAULT_TOP_K = 40
 
 # Version control constants
-VERSION = "0.0.1-r8"
+VERSION = "0.0.1-r7"
 VERSION_HISTORY_DIR = Path(".adaptagen_versions")
 VERSION_METADATA_FILE = "version_metadata.json"
 
@@ -728,11 +721,6 @@ class GeminiAPI:
             model_name=config.model_name,
             generation_config=config.get_generation_config()
         )
-        
-        # Rate limiting parameters
-        self.rate_limit_encountered = False
-        self.rate_limit_backoff = [5, 10, 30, 60, 120, 300, 600]  # Exponential backoff in seconds
-        self.rate_limit_attempt = 0
     
     def generate_response(self, prompt: str) -> Optional[str]:
         """Generate a response from the AI model based on the given prompt."""
@@ -745,19 +733,7 @@ class GeminiAPI:
             # Replace valid tokens
             prompt = TokenRegistry.replace_tokens(prompt)
             
-            # If we've hit rate limits before, apply backoff
-            if self.rate_limit_encountered and self.rate_limit_attempt < len(self.rate_limit_backoff):
-                backoff_time = self.rate_limit_backoff[self.rate_limit_attempt]
-                logger.info(f"Rate limit previously encountered. Backing off for {backoff_time} seconds before trying again.")
-                import time
-                time.sleep(backoff_time)
-            
             response = self.model.generate_content(prompt)
-            
-            # Reset rate limit flags on successful request
-            self.rate_limit_encountered = False
-            self.rate_limit_attempt = 0
-            
             code = response.text
             
             # Check for incomplete code and fix if possible
@@ -765,27 +741,6 @@ class GeminiAPI:
             
             return code
         except Exception as e:
-            error_str = str(e)
-            
-            # Handle rate limiting errors (429)
-            if "429" in error_str and "Resource has been exhausted" in error_str:
-                self.rate_limit_encountered = True
-                
-                if self.rate_limit_attempt < len(self.rate_limit_backoff):
-                    backoff_time = self.rate_limit_backoff[self.rate_limit_attempt]
-                    logger.warning(f"Rate limit encountered (429). Backing off for {backoff_time} seconds and retrying.")
-                    
-                    import time
-                    time.sleep(backoff_time)
-                    
-                    # Increment for next time
-                    self.rate_limit_attempt += 1
-                    
-                    # Recursive retry after backoff
-                    return self.generate_response(prompt)
-                else:
-                    logger.error(f"Rate limit (429) exceeded maximum retry attempts ({len(self.rate_limit_backoff)})")
-            
             logger.error(f"Gemini API error: {e}")
             return None
             
@@ -1303,22 +1258,7 @@ class IncrementalEditor:
                 # Generate improved component
                 improved_component = approach_func(component_name, component_code)
                 
-                # If we got None back, it might be due to rate limiting which is already handled
-                # by the GeminiAPI class with its own backoff strategy. In this case, we should
-                # pause our attempts for a while to let the rate limit reset.
                 if not improved_component:
-                    # Check if the API client has encountered rate limits
-                    if self.gemini_api.rate_limit_encountered:
-                        logger.warning(f"Rate limit encountered while processing {component_name}. Pausing component editing.")
-                        
-                        # Wait longer than the API's own backoff to ensure we're not hammering the API
-                        extended_wait = 600  # 10 minutes
-                        logger.info(f"Waiting {extended_wait} seconds before trying another component...")
-                        time.sleep(extended_wait)
-                        
-                        # Skip to the next component rather than continuing to retry this one
-                        return False, self.current_code
-                    
                     logger.warning(f"Failed to generate improved version for {component_name}")
                     time.sleep(backoff_time)
                     continue
@@ -1378,45 +1318,12 @@ class IncrementalEditor:
         # Sort components by size (smaller first for faster iterations)
         sorted_components = sorted(components.items(), key=lambda x: len(x[1]))
         
-        # Track rate limit occurrences
-        rate_limit_count = 0
-        max_rate_limit_threshold = 3  # After this many rate limits, we'll change strategy
-        
         # Process each component
-        component_index = 0
-        while component_index < len(sorted_components):
-            component_name, component_code = sorted_components[component_index]
-            logger.info(f"Processing component: {component_name} ({component_index+1}/{len(sorted_components)})")
-            
-            # Check if we've hit too many rate limits and should adjust strategy
-            if rate_limit_count >= max_rate_limit_threshold:
-                logger.warning(f"Hit rate limit threshold ({max_rate_limit_threshold}). Switching to conservative approach only.")
-                # Override the edit approaches to only use the most conservative one
-                self.edit_approaches = [self._approach_conservative_edit]
-                
-                # Also increase the backoff times
-                self.backoff_times = [60, 300, 600]  # 1 min, 5 min, 10 min
-                
-                # Reset the counter so we don't keep logging this
-                rate_limit_count = 0
+        for component_name, component_code in sorted_components:
+            logger.info(f"Processing component: {component_name}")
             
             # Try to edit the component
             success, new_code = self.try_edit_component(component_name, component_code)
-            
-            # Check if we hit a rate limit
-            if self.gemini_api.rate_limit_encountered:
-                rate_limit_count += 1
-                
-                # If we've hit multiple rate limits, start skipping components
-                if rate_limit_count >= 2:
-                    # Skip ahead to process only every Nth component
-                    skip_factor = rate_limit_count
-                    next_index = component_index + skip_factor
-                    
-                    if next_index < len(sorted_components):
-                        logger.warning(f"Multiple rate limits encountered. Skipping ahead to component {next_index+1}.")
-                        component_index = next_index
-                        continue
             
             if success:
                 self.current_code = new_code
@@ -1440,9 +1347,6 @@ class IncrementalEditor:
                     "status": "failed",
                     "timestamp": datetime.datetime.now().strftime("%Y%m%d%H%M%S")
                 })
-            
-            # Move to the next component
-            component_index += 1
         
         logger.info(f"Incremental editing completed. Successful edits: {self.successful_edits}, Failed edits: {self.failed_edits}")
         return self.current_code
