@@ -1,5 +1,3 @@
-```python
-#!/usr/bin/env python3
 """
 AdaptaGen: A self-modifying Python script using the Gemini API with version control.
 
