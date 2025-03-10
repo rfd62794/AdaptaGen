@@ -1,0 +1,96 @@
+{
+  "component_history": {
+    "TestComponent": {
+      "attempts": 4,
+      "successes": 2,
+      "failures": 2,
+      "last_success": "20250309224859",
+      "last_failure": "20250309224859",
+      "approaches": {
+        "standard": {
+          "attempts": 2,
+          "successes": 2,
+          "failures": 0
+        },
+        "simplified": {
+          "attempts": 2,
+          "successes": 0,
+          "failures": 2
+        }
+      },
+      "error_patterns": [
+        {
+          "timestamp": "20250309224833",
+          "approach": "simplified",
+          "error": "Verification failed"
+        },
+        {
+          "timestamp": "20250309224859",
+          "approach": "simplified",
+          "error": "Verification failed"
+        }
+      ]
+    }
+  },
+  "approach_success_rates": {
+    "standard": {
+      "attempts": 2,
+      "successes": 2,
+      "failures": 0
+    },
+    "simplified": {
+      "attempts": 2,
+      "successes": 0,
+      "failures": 2
+    }
+  },
+  "prompt_patterns": {
+    "successful": [
+      "Adding print statements for better observability"
+    ],
+    "failed": []
+  },
+  "complexity_metrics": {
+    "TestComponent": [
+      {
+        "timestamp": "20250309224833",
+        "before": {
+          "lines": 2,
+          "cyclomatic": 0,
+          "nesting": 1.0
+        },
+        "after": {
+          "lines": 2,
+          "cyclomatic": 0,
+          "nesting": 1.0
+        },
+        "change": {
+          "lines": 0,
+          "cyclomatic": 0,
+          "nesting": 0.0
+        }
+      },
+      {
+        "timestamp": "20250309224859",
+        "before": {
+          "lines": 2,
+          "cyclomatic": 0,
+          "nesting": 1.0
+        },
+        "after": {
+          "lines": 2,
+          "cyclomatic": 0,
+          "nesting": 1.0
+        },
+        "change": {
+          "lines": 0,
+          "cyclomatic": 0,
+          "nesting": 0.0
+        }
+      }
+    ]
+  },
+  "improvement_metrics": {
+    "overall": []
+  }
+}

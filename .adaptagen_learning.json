@@ -1,6 +1,76 @@
 {
-  "component_history": {},
-  "approach_success_rates": {},
+  "component_history": {
+    "Token": {
+      "attempts": 1,
+      "successes": 0,
+      "failures": 1,
+      "last_success": null,
+      "last_failure": "20250309225033",
+      "approaches": {
+        "standard": {
+          "attempts": 1,
+          "successes": 0,
+          "failures": 1
+        }
+      },
+      "error_patterns": [
+        {
+          "timestamp": "20250309225033",
+          "approach": "standard",
+          "error": "Verification failed"
+        }
+      ]
+    },
+    "Config": {
+      "attempts": 1,
+      "successes": 0,
+      "failures": 1,
+      "last_success": null,
+      "last_failure": "20250309225327",
+      "approaches": {
+        "standard": {
+          "attempts": 1,
+          "successes": 0,
+          "failures": 1
+        }
+      },
+      "error_patterns": [
+        {
+          "timestamp": "20250309225327",
+          "approach": "standard",
+          "error": "Verification failed"
+        }
+      ]
+    },
+    "Goal": {
+      "attempts": 1,
+      "successes": 0,
+      "failures": 1,
+      "last_success": null,
+      "last_failure": "20250309225343",
+      "approaches": {
+        "standard": {
+          "attempts": 1,
+          "successes": 0,
+          "failures": 1
+        }
+      },
+      "error_patterns": [
+        {
+          "timestamp": "20250309225343",
+          "approach": "standard",
+          "error": "Verification failed"
+        }
+      ]
+    }
+  },
+  "approach_success_rates": {
+    "standard": {
+      "attempts": 3,
+      "successes": 0,
+      "failures": 3
+    }
+  },
   "prompt_patterns": {
     "successful": [],
     "failed": []

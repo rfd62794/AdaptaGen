@@ -1,9 +1,9 @@
 """
 AdaptaGen: A self-modifying Python script using the Gemini API with version control.
 
-Version: 0.0.2-r1
+Version: 0.0.2-r2
 
-Enhancements in 0.0.2-r1:
+Enhancements in 0.0.2-r2:
 1. Added learning from past improvements:
    - Maintains a database of successful and failed edits
    - Analyzes patterns in successful improvements
@@ -108,7 +108,7 @@ ENV_TOP_K = "TOP_K"
 DEFAULT_TOP_K = 40
 
 # Version control constants
-VERSION = "0.0.2-r1"
+VERSION = "0.0.2-r2"
 VERSION_HISTORY_DIR = Path(".adaptagen_versions")
 VERSION_METADATA_FILE = "version_metadata.json"
 
@@ -1103,10 +1103,16 @@ class GeminiAPI:
             generation_config=config.get_generation_config()
         )
         
-        # Rate limiting parameters
+        # Rate limiting parameters - extended to allow for up to an hour of backoff
         self.rate_limit_encountered = False
-        self.rate_limit_backoff = [5, 10, 30, 60, 120, 300, 600]  # Exponential backoff in seconds
+        # Exponential backoff in seconds: 5s, 10s, 30s, 1m, 2m, 5m, 10m, 15m, 30m, 60m
+        self.rate_limit_backoff = [5, 10, 30, 60, 120, 300, 600, 900, 1800, 3600]
         self.rate_limit_attempt = 0
+        
+        # Track API usage to avoid hitting limits
+        self.api_calls_today = 0
+        self.last_call_time = None
+        self.min_call_interval = 5  # Minimum seconds between API calls
     
     def generate_response(self, prompt: str) -> Optional[str]:
         """Generate a response from the AI model based on the given prompt."""
@@ -1122,9 +1128,17 @@ class GeminiAPI:
             # If we've hit rate limits before, apply backoff
             if self.rate_limit_encountered and self.rate_limit_attempt < len(self.rate_limit_backoff):
                 backoff_time = self.rate_limit_backoff[self.rate_limit_attempt]
-                logger.info(f"Rate limit previously encountered. Backing off for {backoff_time} seconds before trying again.")
+                logger.info(f"Rate limit previously encountered. Backing off for {self._format_time(backoff_time)} before trying again.")
                 import time
                 time.sleep(backoff_time)
+            
+            # Enforce minimum interval between API calls to avoid rate limits
+            self._enforce_call_interval()
+            
+            # Track API usage
+            self.api_calls_today += 1
+            import datetime
+            self.last_call_time = datetime.datetime.now()
             
             response = self.model.generate_content(prompt)
             
@@ -1147,7 +1161,7 @@ class GeminiAPI:
                 
                 if self.rate_limit_attempt < len(self.rate_limit_backoff):
                     backoff_time = self.rate_limit_backoff[self.rate_limit_attempt]
-                    logger.warning(f"Rate limit encountered (429). Backing off for {backoff_time} seconds and retrying.")
+                    logger.warning(f"Rate limit encountered (429). Backing off for {self._format_time(backoff_time)} and retrying.")
                     
                     import time
                     time.sleep(backoff_time)
@@ -1159,10 +1173,43 @@ class GeminiAPI:
                     return self.generate_response(prompt)
                 else:
                     logger.error(f"Rate limit (429) exceeded maximum retry attempts ({len(self.rate_limit_backoff)})")
+                    logger.info("Resetting rate limit attempt counter and trying one more time with maximum backoff")
+                    
+                    # Reset counter but use maximum backoff time
+                    self.rate_limit_attempt = 0
+                    
+                    import time
+                    time.sleep(self.rate_limit_backoff[-1])  # Use the longest backoff time
+                    
+                    # One final attempt
+                    return self.generate_response(prompt)
             
             logger.error(f"Gemini API error: {e}")
             return None
+    
+    def _enforce_call_interval(self) -> None:
+        """Enforce a minimum interval between API calls to avoid rate limits."""
+        if self.last_call_time:
+            import datetime
+            import time
             
+            now = datetime.datetime.now()
+            elapsed = (now - self.last_call_time).total_seconds()
+            
+            if elapsed < self.min_call_interval:
+                sleep_time = self.min_call_interval - elapsed
+                logger.debug(f"Enforcing minimum call interval. Waiting {sleep_time:.2f}s")
+                time.sleep(sleep_time)
+    
+    def _format_time(self, seconds: int) -> str:
+        """Format time in seconds to a human-readable string."""
+        if seconds < 60:
+            return f"{seconds}s"
+        elif seconds < 3600:
+            return f"{seconds // 60}m {seconds % 60}s"
+        else:
+            return f"{seconds // 3600}h {(seconds % 3600) // 60}m"
+    
     def _fix_incomplete_code(self, code: str) -> str:
         """
         Check for and fix incomplete generated code.
@@ -1667,7 +1714,7 @@ class LearningDatabase:
     
     def enhance_prompt_for_component(self, component_name: str, base_prompt: str) -> str:
         """
-        Enhance a prompt based on learning from past successes and failures.
+        Enhance a prompt for a component based on learning from past successes and failures.
         
         Args:
             component_name: Name of the component
@@ -1676,61 +1723,40 @@ class LearningDatabase:
         Returns:
             Enhanced prompt
         """
-        enhancements = []
+        # Get component data
+        component_data = self._get_component_data(component_name)
         
-        # Add component-specific guidance if available
-        if component_name in self.data["component_history"]:
-            history = self.data["component_history"][component_name]
+        if not component_data or not component_data.get('attempts'):
+            return base_prompt
             
-            # Add warnings about common errors
-            if "error_patterns" in history and history["error_patterns"]:
-                common_errors = {}
-                for error_data in history["error_patterns"]:
-                    error = error_data["error"]
-                    if error in common_errors:
-                        common_errors[error] += 1
-                    else:
-                        common_errors[error] = 1
-                
-                # Get the most common errors
-                top_errors = sorted(common_errors.items(), key=lambda x: x[1], reverse=True)[:2]
-                if top_errors:
-                    error_guidance = "IMPORTANT - Avoid these common issues:\n"
-                    for error, _ in top_errors:
-                        error_guidance += f"- {error}\n"
-                    enhancements.append(error_guidance)
+        # Extract insights from past attempts
+        successful_attempts = [a for a in component_data['attempts'] if a.get('success')]
+        failed_attempts = [a for a in component_data['attempts'] if not a.get('success')]
+        
+        # Build enhancement
+        enhancement = "\n\nBased on past attempts, please consider the following insights:\n"
         
         # Add successful patterns
-        if self.data["prompt_patterns"]["successful"]:
-            # Get the top 3 successful patterns
-            top_patterns = self.data["prompt_patterns"]["successful"][:3]
-            if top_patterns:
-                pattern_guidance = "Consider these successful patterns:\n"
-                for pattern in top_patterns:
-                    pattern_guidance += f"- {pattern}\n"
-                enhancements.append(pattern_guidance)
-        
-        # Combine enhancements with base prompt
-        if enhancements:
-            # Find the right place to insert enhancements (before the final instructions)
-            lines = base_prompt.split('\n')
-            insert_point = -1
+        if successful_attempts:
+            enhancement += "\nSuccessful approaches:\n"
+            for i, attempt in enumerate(successful_attempts[:3]):  # Limit to top 3
+                approach = attempt.get('approach', 'unknown')
+                enhancement += f"{i+1}. {approach} approach was successful\n"
+                
+        # Add failure patterns to avoid
+        if failed_attempts:
+            enhancement += "\nPatterns to avoid:\n"
+            for i, attempt in enumerate(failed_attempts[:3]):  # Limit to top 3
+                error = attempt.get('error', 'unknown error')
+                enhancement += f"{i+1}. Avoid issues that led to: {error}\n"
+                
+        # Add specific guidance based on component type
+        if component_name.startswith('class '):
+            enhancement += "\nThis is a class component. Focus on improving class structure, methods, and encapsulation.\n"
+        elif component_name.startswith('def '):
+            enhancement += "\nThis is a function component. Focus on improving function logic, parameters, and return values.\n"
             
-            # Look for the "IMPORTANT:" section or similar
-            for i, line in enumerate(lines):
-                if "IMPORTANT:" in line or "CRITICAL" in line or "GUIDELINES:" in line:
-                    insert_point = i
-                    break
-            
-            if insert_point >= 0:
-                # Insert enhancements before the guidelines
-                enhanced_lines = lines[:insert_point] + enhancements + lines[insert_point:]
-                return '\n'.join(enhanced_lines)
-            else:
-                # Append to the end if no suitable insertion point found
-                return base_prompt + '\n\n' + '\n'.join(enhancements)
-        
-        return base_prompt
+        return base_prompt + enhancement
     
     def _calculate_complexity(self, code: str) -> Dict[str, float]:
         """
@@ -1862,484 +1888,238 @@ class LearningDatabase:
                 report += f"- {component}: {improvement} complexity reduction\n"
         
         return report
+    
+    def _get_component_data(self, component_name: str) -> Dict:
+        """
+        Get data for a specific component.
+        
+        Args:
+            component_name: Name of the component
+            
+        Returns:
+            Component data dictionary or empty dict if not found
+        """
+        # Initialize component data if it doesn't exist
+        if component_name not in self.data['components']:
+            self.data['components'][component_name] = {
+                'attempts': [],
+                'success_count': 0,
+                'failure_count': 0,
+                'last_updated': datetime.now().isoformat()
+            }
+            
+        return self.data['components'].get(component_name, {})
 
 class IncrementalEditor:
     """
-    Manages incremental editing of code with verification after each change.
-    Makes small, controlled edits and verifies they work before proceeding.
+    Handles incremental editing of code components.
     """
-    
-    def __init__(self, original_code: str, code_manager: CodeManager, 
+    def __init__(self, code: str, code_manager: CodeManager, 
                  version_control: VersionControl, gemini_api: GeminiAPI,
-                 target_file: Path = None, learning_db: LearningDatabase = None):
-        """Initialize the incremental editor."""
-        self.original_code = original_code
-        self.current_code = original_code
+                 target_filepath: Path, learning_db: Optional[LearningDatabase] = None):
+        self.code = code
         self.code_manager = code_manager
         self.version_control = version_control
         self.gemini_api = gemini_api
-        self.target_file = target_file
-        self.edit_history = []
+        self.target_filepath = target_filepath
+        self.learning_db = learning_db
         self.successful_edits = 0
         self.failed_edits = 0
-        self.backoff_times = [1, 2, 5, 10, 30, 60]  # Backoff times in seconds
-        self.edit_approaches = [
-            self._approach_standard_edit,
-            self._approach_simplified_edit,
-            self._approach_conservative_edit,
-            self._approach_focused_bugfix
-        ]
+        self.rate_limit_hits = 0
+        self.max_components_per_run = 10
         
-        # Initialize or use provided learning database
-        self.learning_db = learning_db if learning_db else LearningDatabase()
+        # Default backoff times in seconds (up to 5 minutes)
+        # 1s, 5s, 15s, 30s, 60s, 120s, 300s
+        self.backoff_times = [1, 5, 15, 30, 60, 120, 300]
         
-        # Track complexity progression
-        self.initial_complexity = self._calculate_overall_complexity(original_code)
-        self.current_complexity = self.initial_complexity.copy()
+        # Track components that have been processed
+        self.processed_components = set()
         
-    def _calculate_overall_complexity(self, code: str) -> Dict[str, float]:
-        """Calculate overall complexity metrics for the entire codebase."""
-        return self.learning_db._calculate_complexity(code)
-        
-    def get_component_edit_prompt(self, component_name: str, component_code: str, 
-                                  approach: str = "standard") -> str:
+    def run_incremental_edit(self, new_version: str) -> str:
         """
-        Generate a prompt for editing a specific component.
+        Run the incremental editing process on the code.
         
         Args:
-            component_name: Name of the component to edit
-            component_code: Code of the component to edit
-            approach: Editing approach to use
+            new_version: The new version identifier
             
         Returns:
-            Prompt for editing the component
+            The updated code
         """
+        # Extract components from the code
+        components = self.code_manager.extract_components(self.code)
+        logger.info(f"Extracted {len(components)} components from code")
+        
+        # Sort components by priority (classes first, then functions)
+        sorted_components = sorted(
+            components.items(),
+            key=lambda x: (
+                0 if x[0].startswith("class ") else 1,  # Classes first
+                len(x[1])  # Then by size (smaller first)
+            )
+        )
+        
+        # Process components
+        processed_count = 0
+        for component_name, component_code in sorted_components:
+            # Skip if we've reached the maximum number of components for this run
+            if processed_count >= self.max_components_per_run:
+                logger.info(f"Reached maximum of {self.max_components_per_run} components for this run")
+                break
+                
+            # Skip if this component has already been processed
+            if component_name in self.processed_components:
+                logger.info(f"Skipping already processed component: {component_name}")
+                continue
+                
+            logger.info(f"Processing component: {component_name}")
+            
+            # Try to improve the component
+            improved_component = self._improve_component(component_name, component_code, new_version)
+            
+            if improved_component and improved_component != component_code:
+                # Replace the component in the code
+                self.code = self.code_manager.replace_component(self.code, component_name, improved_component)
+                self.successful_edits += 1
+                logger.info(f"Successfully improved component: {component_name}")
+                
+                # Record the successful edit in the learning database
+                if self.learning_db:
+                    self.learning_db.record_edit_attempt(
+                        component_name=component_name,
+                        success=True,
+                        error=None,
+                        approach="incremental_edit"
+                    )
+                
+                # Write the updated code to the file after each successful edit
+                if self.code_manager.write_code(self.target_filepath, self.code):
+                    logger.info(f"Updated {self.target_filepath} with improved component")
+                else:
+                    logger.error(f"Failed to write to {self.target_filepath}")
+            else:
+                self.failed_edits += 1
+                logger.warning(f"Failed to improve component: {component_name}")
+                
+                # Record the failed edit in the learning database
+                if self.learning_db:
+                    self.learning_db.record_edit_attempt(
+                        component_name=component_name,
+                        success=False,
+                        error="No improvement generated",
+                        approach="incremental_edit"
+                    )
+            
+            # Mark this component as processed
+            self.processed_components.add(component_name)
+            processed_count += 1
+            
+        logger.info(f"Incremental editing complete. Successful edits: {self.successful_edits}, Failed edits: {self.failed_edits}, Rate limit hits: {self.rate_limit_hits}")
+        return self.code
+        
+    def _improve_component(self, component_name: str, component_code: str, new_version: str) -> Optional[str]:
+        """
+        Attempt to improve a single component.
+        
+        Args:
+            component_name: The name of the component
+            component_code: The code of the component
+            new_version: The new version identifier
+            
+        Returns:
+            The improved component code, or None if improvement failed
+        """
+        # Prepare the prompt
         base_prompt = f"""
-        Improve the following {component_name} component from a Python script:
-
+        You are an expert Python developer tasked with improving the following code component from AdaptaGen version {new_version}.
+        
+        Component: {component_name}
+        
         ```python
         {component_code}
         ```
+        
+        Please improve this component by:
+        1. Enhancing functionality
+        2. Fixing any bugs or edge cases
+        3. Improving error handling
+        4. Adding or improving docstrings and comments
+        5. Optimizing performance where possible
+        
+        Return ONLY the improved code for this component, nothing else.
         """
         
-        if approach == "standard":
-            focus = """
-            Focus on:
-            1. Improving functionality and robustness
-            2. Better error handling
-            3. Code clarity and documentation
-            4. Performance optimizations if applicable
-            """
-        elif approach == "simplified":
-            focus = """
-            Focus on:
-            1. Simplifying the code while maintaining functionality
-            2. Removing unnecessary complexity
-            3. Making the code more readable
-            """
-        elif approach == "conservative":
-            focus = """
-            Focus on:
-            1. Making minimal changes to fix obvious issues
-            2. Improving comments and documentation
-            3. DO NOT change the core logic or structure
-            """
-        elif approach == "bugfix":
-            focus = """
-            Focus ONLY on:
-            1. Fixing bugs and edge cases
-            2. Improving error handling
-            3. DO NOT add new features or change existing functionality
-            """
+        # Enhance the prompt with learning from past attempts if available
+        if self.learning_db:
+            enhanced_prompt = self.learning_db.enhance_prompt_for_component(component_name, base_prompt)
+        else:
+            enhanced_prompt = base_prompt
         
-        guidelines = """
-        IMPORTANT:
-        1. Return ONLY the improved component code, nothing else
-        2. Maintain the same function/method signatures
-        3. Ensure the code is syntactically correct
-        4. Do not change the component's core purpose
-        5. Do not add dependencies on components that don't exist
-        """
+        # Try to get a response with backoff for rate limits
+        retry_count = 0
+        max_retries = len(self.backoff_times)
         
-        prompt = base_prompt + focus + guidelines + "\n\nReturn the complete improved component code."
-        
-        # Enhance the prompt based on learning
-        enhanced_prompt = self.learning_db.enhance_prompt_for_component(component_name, prompt)
-        
-        return enhanced_prompt
-    
-    def extract_components(self) -> Dict[str, str]:
-        """
-        Extract individual components (classes, functions) from the code.
-        
-        Returns:
-            Dictionary mapping component names to their code
-        """
-        components = {}
-        
-        # Extract classes
-        class_pattern = re.compile(r'(class\s+(\w+)[\(:].*?)(?=class\s+\w+[\(:]|\Z)', re.DOTALL)
-        for match in class_pattern.finditer(self.current_code):
-            class_code = match.group(1)
-            class_name = match.group(2)
-            components[class_name] = class_code
-            
-        # Extract standalone functions
-        function_pattern = re.compile(r'(def\s+(\w+)\s*\(.*?\).*?)(?=def\s+\w+\s*\(|\Z|class\s+\w+[\(:])', re.DOTALL)
-        for match in function_pattern.finditer(self.current_code):
-            # Skip methods inside classes
-            if not re.search(r'^\s+def', match.group(1), re.MULTILINE):
-                function_code = match.group(1)
-                function_name = match.group(2)
-                components[function_name] = function_code
+        while retry_count < max_retries:
+            try:
+                response = self.gemini_api.generate_text(enhanced_prompt)
                 
-        return components
-    
-    def replace_component(self, component_name: str, new_component_code: str) -> str:
-        """
-        Replace a component in the code with its improved version.
-        
-        Args:
-            component_name: Name of the component to replace
-            new_component_code: New code for the component
-            
-        Returns:
-            Updated full code
-        """
-        # For classes
-        class_pattern = re.compile(f'(class\\s+{component_name}[\\(:].*?)(?=class\\s+\\w+[\\(:]|\\Z)', re.DOTALL)
-        if class_pattern.search(self.current_code):
-            return class_pattern.sub(new_component_code, self.current_code)
-            
-        # For standalone functions
-        function_pattern = re.compile(f'(def\\s+{component_name}\\s*\\(.*?\\).*?)(?=def\\s+\\w+\\s*\\(|\\Z|class\\s+\\w+[\\(:])', re.DOTALL)
-        if function_pattern.search(self.current_code):
-            return function_pattern.sub(new_component_code, self.current_code)
-            
-        # If component not found, return original code
-        logger.warning(f"Component {component_name} not found in code")
-        return self.current_code
-    
-    def verify_code(self, code: str) -> bool:
-        """
-        Verify that the code is valid and can be executed.
-        
-        Args:
-            code: Code to verify
-            
-        Returns:
-            True if code is valid, False otherwise
-        """
-        try:
-            # Check for syntax errors
-            compile(code, '<string>', 'exec')
-            
-            # Use CodeValidator for more thorough checks
-            validator = CodeValidator()
-            is_valid, issues = validator.validate_code(code, self.original_code)
-            
-            if not is_valid:
-                logger.warning(f"Code validation failed: {', '.join(issues)}")
-                return False
-            
-            # Test the code functionality
-            if not self.test_code_functionality(code):
-                logger.warning("Code functionality test failed")
-                return False
-                
-            return True
-        except Exception as e:
-            logger.error(f"Code verification failed: {e}")
-            return False
-    
-    def test_code_functionality(self, code: str) -> bool:
-        """
-        Test the functionality of the code by executing it in a controlled environment.
-        
-        Args:
-            code: Code to test
-            
-        Returns:
-            True if code passes functional tests, False otherwise
-        """
-        try:
-            # Create a temporary file for the code
-            import tempfile
-            with tempfile.NamedTemporaryFile(suffix='.py', delete=False) as temp_file:
-                temp_path = temp_file.name
-                temp_file.write(code.encode('utf-8'))
-            
-            # Execute the code in a subprocess to isolate it
-            import subprocess
-            result = subprocess.run(
-                [sys.executable, temp_path, '--test'],
-                capture_output=True,
-                text=True,
-                timeout=10  # Timeout after 10 seconds
-            )
-            
-            # Clean up the temporary file
-            import os
-            os.unlink(temp_path)
-            
-            # Check if execution was successful
-            if result.returncode != 0:
-                logger.warning(f"Code execution failed with return code {result.returncode}")
-                logger.warning(f"Error output: {result.stderr}")
-                return False
-            
-            return True
-        except subprocess.TimeoutExpired:
-            logger.warning("Code execution timed out")
-            return False
-        except Exception as e:
-            logger.error(f"Error testing code functionality: {e}")
-            return False
-    
-    def _approach_standard_edit(self, component_name: str, component_code: str) -> str:
-        """Standard editing approach."""
-        prompt = self.get_component_edit_prompt(component_name, component_code, "standard")
-        return self.gemini_api.generate_response(prompt)
-    
-    def _approach_simplified_edit(self, component_name: str, component_code: str) -> str:
-        """Simplified editing approach focusing on readability."""
-        prompt = self.get_component_edit_prompt(component_name, component_code, "simplified")
-        return self.gemini_api.generate_response(prompt)
-    
-    def _approach_conservative_edit(self, component_name: str, component_code: str) -> str:
-        """Conservative editing approach with minimal changes."""
-        prompt = self.get_component_edit_prompt(component_name, component_code, "conservative")
-        return self.gemini_api.generate_response(prompt)
-    
-    def _approach_focused_bugfix(self, component_name: str, component_code: str) -> str:
-        """Focused bug-fixing approach."""
-        prompt = self.get_component_edit_prompt(component_name, component_code, "bugfix")
-        return self.gemini_api.generate_response(prompt)
-    
-    def try_edit_component(self, component_name: str, component_code: str) -> Tuple[bool, str]:
-        """
-        Try to edit a component using multiple approaches with timed backoff.
-        
-        Args:
-            component_name: Name of the component to edit
-            component_code: Code of the component to edit
-            
-        Returns:
-            Tuple of (success, new_code)
-        """
-        import time
-        
-        # Get the best approach for this component based on learning
-        best_approach = self.learning_db.get_best_approach_for_component(component_name)
-        
-        # Reorder approaches to try the best one first
-        approach_funcs = {
-            "standard": self._approach_standard_edit,
-            "simplified": self._approach_simplified_edit,
-            "conservative": self._approach_conservative_edit,
-            "bugfix": self._approach_focused_bugfix
-        }
-        
-        # Create a new ordered list of approaches
-        ordered_approaches = []
-        if best_approach in approach_funcs:
-            ordered_approaches.append((best_approach, approach_funcs[best_approach]))
-            
-        # Add the rest of the approaches
-        for name, func in approach_funcs.items():
-            if name != best_approach:
-                ordered_approaches.append((name, func))
-        
-        # Try each approach
-        for approach_idx, (approach_name, approach_func) in enumerate(ordered_approaches):
-            logger.info(f"Trying approach {approach_idx+1}/{len(ordered_approaches)} ({approach_name}) for {component_name}")
-            
-            # Try with backoff
-            for attempt, backoff_time in enumerate(self.backoff_times):
-                logger.info(f"Attempt {attempt+1}/{len(self.backoff_times)} with {backoff_time}s backoff")
-                
-                # Generate improved component
-                improved_component = approach_func(component_name, component_code)
-                
-                # If we got None back, it might be due to rate limiting which is already handled
-                # by the GeminiAPI class with its own backoff strategy. In this case, we should
-                # pause our attempts for a while to let the rate limit reset.
-                if not improved_component:
-                    # Check if the API client has encountered rate limits
-                    if self.gemini_api.rate_limit_encountered:
-                        logger.warning(f"Rate limit encountered while processing {component_name}. Pausing component editing.")
-                        
-                        # Record the failed attempt in the learning database
-                        self.learning_db.record_edit_attempt(
-                            component_name,
-                            approach_name,
-                            success=False,
-                            code_before=component_code,
-                            error_message="Rate limit exceeded"
-                        )
-                        
-                        # Wait longer than the API's own backoff to ensure we're not hammering the API
-                        extended_wait = 600  # 10 minutes
-                        logger.info(f"Waiting {extended_wait} seconds before trying another component...")
-                        time.sleep(extended_wait)
-                        
-                        # Skip to the next component rather than continuing to retry this one
-                        return False, self.current_code
+                if response:
+                    # Extract the code from the response
+                    code_pattern = r"```(?:python)?\s*(.*?)```"
+                    matches = re.findall(code_pattern, response, re.DOTALL)
                     
-                    logger.warning(f"Failed to generate improved version for {component_name}")
+                    if matches:
+                        improved_code = matches[0].strip()
+                        return improved_code
+                    else:
+                        # If no code block found, check if the entire response is valid Python
+                        if self._is_valid_python(response):
+                            return response.strip()
+                        else:
+                            logger.warning(f"No valid Python code found in response for {component_name}")
+                            return None
+                else:
+                    logger.warning(f"Empty response from API for {component_name}")
+                    return None
+                    
+            except Exception as e:
+                retry_count += 1
+                self.rate_limit_hits += 1
+                
+                if retry_count < max_retries:
+                    backoff_time = self.backoff_times[retry_count - 1]
+                    logger.warning(f"API error: {str(e)}. Retrying in {backoff_time} seconds... (Attempt {retry_count}/{max_retries})")
                     time.sleep(backoff_time)
-                    continue
-                
-                # Replace component in the code
-                new_code = self.replace_component(component_name, improved_component)
-                
-                # Verify the new code
-                if self.verify_code(new_code):
-                    logger.info(f"Successfully improved component: {component_name}")
+                else:
+                    logger.error(f"Failed to improve component {component_name} after {max_retries} attempts: {str(e)}")
                     
-                    # Record the successful attempt in the learning database
-                    self.learning_db.record_edit_attempt(
-                        component_name,
-                        approach_name,
-                        success=True,
-                        code_before=component_code,
-                        code_after=improved_component
-                    )
+                    # Record the failed edit in the learning database
+                    if self.learning_db:
+                        self.learning_db.record_edit_attempt(
+                            component_name=component_name,
+                            success=False,
+                            error=str(e),
+                            approach="incremental_edit"
+                        )
                     
-                    # Update complexity metrics
-                    self.current_complexity = self._calculate_overall_complexity(new_code)
-                    
-                    return True, new_code
-                
-                # Record the failed attempt in the learning database
-                self.learning_db.record_edit_attempt(
-                    component_name,
-                    approach_name,
-                    success=False,
-                    code_before=component_code,
-                    error_message="Verification failed"
-                )
-                
-                logger.warning(f"Verification failed for {component_name}, backing off for {backoff_time}s")
-                time.sleep(backoff_time)
-            
-            # If we've tried all backoff times with this approach and failed, try the next approach
-            logger.warning(f"All attempts with approach {approach_name} failed for {component_name}")
+                    return None
         
-        # If all approaches failed, return failure
-        logger.error(f"All approaches failed for {component_name}")
-        return False, self.current_code
-    
-    def save_current_code(self, version_suffix: str = None) -> None:
+        return None
+        
+    def _is_valid_python(self, code: str) -> bool:
         """
-        Save the current code to the target file and version history.
+        Check if a string is valid Python code.
         
         Args:
-            version_suffix: Optional suffix to add to the version
-        """
-        if self.target_file:
-            # Save to the target file
-            self.code_manager.write_code(self.target_file, self.current_code)
-            logger.info(f"Saved current code to {self.target_file}")
-            
-            # Save to version history
-            timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
-            version = f"{VERSION}-{version_suffix}_{timestamp}" if version_suffix else f"{VERSION}-{timestamp}"
-            self.version_control.save_version(self.current_code, version)
-            logger.info(f"Saved version {version} to version history")
-    
-    def run_incremental_edit(self, version_suffix: str = "incremental") -> str:
-        """
-        Run the incremental editing process.
-        
-        Args:
-            version_suffix: Suffix to add to version for saving
+            code: The code to check
             
         Returns:
-            Final improved code
+            True if the code is valid Python, False otherwise
         """
-        logger.info("Starting incremental editing process")
-        
-        # Extract components
-        components = self.extract_components()
-        logger.info(f"Extracted {len(components)} components for incremental editing")
-        
-        # Prioritize components using the learning database
-        sorted_components = self.learning_db.prioritize_components(components)
-        logger.info(f"Prioritized {len(sorted_components)} components based on learning history")
-        
-        # Track rate limit occurrences
-        rate_limit_count = 0
-        max_rate_limit_threshold = 3  # After this many rate limits, we'll change strategy
-        
-        # Process each component
-        component_index = 0
-        while component_index < len(sorted_components):
-            component_name, component_code = sorted_components[component_index]
-            logger.info(f"Processing component: {component_name} ({component_index+1}/{len(sorted_components)})")
-            
-            # Check if we've hit too many rate limits and should adjust strategy
-            if rate_limit_count >= max_rate_limit_threshold:
-                logger.warning(f"Hit rate limit threshold ({max_rate_limit_threshold}). Switching to conservative approach only.")
-                # Override the edit approaches to only use the most conservative one
-                self.edit_approaches = [self._approach_conservative_edit]
-                
-                # Also increase the backoff times
-                self.backoff_times = [60, 300, 600]  # 1 min, 5 min, 10 min
-                
-                # Reset the counter so we don't keep logging this
-                rate_limit_count = 0
-            
-            # Try to edit the component
-            success, new_code = self.try_edit_component(component_name, component_code)
-            
-            # Check if we hit a rate limit
-            if self.gemini_api.rate_limit_encountered:
-                rate_limit_count += 1
-                
-                # If we've hit multiple rate limits, start skipping components
-                if rate_limit_count >= 2:
-                    # Skip ahead to process only every Nth component
-                    skip_factor = rate_limit_count
-                    next_index = component_index + skip_factor
-                    
-                    if next_index < len(sorted_components):
-                        logger.warning(f"Multiple rate limits encountered. Skipping ahead to component {next_index+1}.")
-                        component_index = next_index
-                        continue
-            
-            if success:
-                self.current_code = new_code
-                self.successful_edits += 1
-                
-                # Save the current state
-                self.save_current_code(f"{version_suffix}_{component_name}")
-                
-                # Record successful edit
-                self.edit_history.append({
-                    "component": component_name,
-                    "status": "success",
-                    "timestamp": datetime.datetime.now().strftime("%Y%m%d%H%M%S")
-                })
-            else:
-                self.failed_edits += 1
-                
-                # Record failed edit
-                self.edit_history.append({
-                    "component": component_name,
-                    "status": "failed",
-                    "timestamp": datetime.datetime.now().strftime("%Y%m%d%H%M%S")
-                })
-            
-            # Move to the next component
-            component_index += 1
-        
-        # Generate and log improvement report
-        improvement_report = self.learning_db.generate_improvement_report()
-        logger.info(f"Improvement Report:\n{improvement_report}")
-        
-        logger.info(f"Incremental editing completed. Successful edits: {self.successful_edits}, Failed edits: {self.failed_edits}")
-        return self.current_code
+        try:
+            compile(code, '<string>', 'exec')
+            return True
+        except SyntaxError:
+            return False
 
 class AdaptaGen:
     """Orchestrates the self-modification process."""
@@ -2358,7 +2138,7 @@ class AdaptaGen:
         TokenRegistry.register("ADAPTAGEN", self.__class__.__name__)
     
     def run(self, increment_type: str = 'revision', use_incremental: bool = False, 
-            goal_name: str = None) -> None:
+            goal_name: str = None, max_components: int = 10, patient_mode: bool = False) -> None:
         """
         Execute the self-modification process.
         
@@ -2366,6 +2146,8 @@ class AdaptaGen:
             increment_type: Type of version increment ('major', 'minor', 'patch', or 'revision')
             use_incremental: Whether to use incremental editing instead of full regeneration
             goal_name: Name of the goal to use (if None, use current goal)
+            max_components: Maximum number of components to process in a single run
+            patient_mode: Whether to use extended backoff times for more patient operation
         """
         # Set the current goal if specified
         if goal_name:
@@ -2423,6 +2205,17 @@ class AdaptaGen:
                 target_filepath,
                 self.learning_db
             )
+            
+            # Configure the incremental editor based on parameters
+            if max_components:
+                incremental_editor.max_components_per_run = max_components
+                logger.info(f"Set maximum components per run to {max_components}")
+                
+            if patient_mode:
+                # Use extended backoff times for more patient operation
+                # Up to 1 hour: 1s, 5s, 15s, 30s, 1m, 2m, 5m, 10m, 15m, 30m, 60m
+                incremental_editor.backoff_times = [1, 5, 15, 30, 60, 120, 300, 600, 900, 1800, 3600]
+                logger.info("Using patient mode with extended backoff times (up to 1 hour)")
             
             try:
                 # Run incremental editing
@@ -2613,58 +2406,78 @@ class AdaptaGen:
 
 def main():
     """Main entry point for the script."""
+    import argparse
+    
+    parser = argparse.ArgumentParser(description='AdaptaGen: Self-Modifying AI Agent')
+    parser.add_argument('--incremental', action='store_true', help='Use incremental editing instead of full regeneration')
+    parser.add_argument('--version-type', choices=['major', 'minor', 'patch', 'revision'], default='revision', help='Type of version increment')
+    parser.add_argument('--test', action='store_true', help='Run in test mode without making changes')
+    parser.add_argument('--goal', type=str, help='Specify a goal to use (e.g., "performance", "documentation", "features")')
+    parser.add_argument('--report', action='store_true', help='Generate a report on learned information')
+    parser.add_argument('--list-versions', action='store_true', help='List all versions in the version history')
+    parser.add_argument('--max-components', type=int, default=10, help='Maximum number of components to process in a single run')
+    parser.add_argument('--patient', action='store_true', help='Use extended backoff times for more patient operation (up to 1 hour)')
+    
+    args = parser.parse_args()
+    
     try:
-        # Parse command line arguments
-        parser = argparse.ArgumentParser(description='AdaptaGen: Self-modifying Python script')
-        parser.add_argument('--incremental', action='store_true', 
-                            help='Use incremental editing approach instead of full regeneration')
-        parser.add_argument('--version-type', choices=['major', 'minor', 'patch', 'revision'],
-                            default='revision', help='Type of version increment')
-        parser.add_argument('--test', action='store_true',
-                            help='Run in test mode to verify functionality')
-        parser.add_argument('--goal', type=str,
-                            help='Specify a goal to use (SelfEditGoal, PerformanceGoal, DocumentationGoal, FeatureGoal)')
-        parser.add_argument('--report', action='store_true',
-                            help='Generate and display an improvement report')
-        parser.add_argument('--list-versions', action='store_true',
-                            help='List all versions in the version history')
-        args = parser.parse_args()
-        
-        # Test mode - just verify the script can be imported and run basic functions
-        if args.test:
-            # In test mode, we just exit successfully to indicate the script is valid
-            logger.info("Test mode: Script loaded successfully")
-            sys.exit(0)
-        
         # Initialize configuration from environment variables
         config = Config.from_env()
         
-        # Create AdaptaGen instance
-        adaptagen = AdaptaGen(config)
+        # Initialize the agent
+        agent = AdaptaGen(config)
         
-        # Handle specific commands
+        # List versions if requested
         if args.list_versions:
-            adaptagen.list_versions()
+            versions = agent.version_control.get_version_history()
+            if versions:
+                print("Version History:")
+                for version, timestamp in versions.items():
+                    print(f"  {version} - {timestamp}")
+            else:
+                print("No version history found.")
             return
-            
+        
+        # Generate report if requested
         if args.report:
-            report = adaptagen.generate_improvement_report()
-            print(report)
+            if agent.learning_db:
+                report = agent.learning_db.generate_improvement_report()
+                print("\nImprovement Report:")
+                print(report)
+                
+                # Print raw database content for debugging
+                print("\nRaw Database Content:")
+                print(json.dumps(agent.learning_db.data, indent=2))
+            else:
+                print("No learning database available.")
             return
         
-        # Run the main process
-        adaptagen.run(
-            increment_type=args.version_type, 
-            use_incremental=args.incremental,
-            goal_name=args.goal
-        )
+        # Run in test mode if requested
+        if args.test:
+            print(f"Running AdaptaGen {VERSION} in test mode")
+            print(f"Current file: {__file__}")
+            print(f"Version type: {args.version_type}")
+            print(f"Incremental: {args.incremental}")
+            if args.goal:
+                print(f"Goal: {args.goal}")
+            if args.patient:
+                print("Patient mode: Enabled (using extended backoff times up to 1 hour)")
+            if args.max_components:
+                print(f"Max components: {args.max_components}")
+            return
         
-    except ValueError as e:
-        logger.error(e)
-        sys.exit(1)
+        # Run the agent
+        agent.run(
+            increment_type=args.version_type,
+            use_incremental=args.incremental,
+            goal_name=args.goal,
+            max_components=args.max_components,
+            patient_mode=args.patient
+        )
     except Exception as e:
-        logger.error(f"Unexpected error: {e}")
-        sys.exit(1)
+        print(f"Error: {e}")
+        import traceback
+        traceback.print_exc()
 
 
 

@@ -1,47 +1,10 @@
 """
 AdaptaGen: A self-modifying Python script using the Gemini API with version control.
 
-Version: 0.0.2-r1
+Version: 0.0.1-r7
 
-Enhancements in 0.0.2-r1:
-1. Added learning from past improvements:
-   - Maintains a database of successful and failed edits
-   - Analyzes patterns in successful improvements
-   - Prioritizes components based on historical success rates
-   - Adapts prompts based on what has worked in the past
-
-2. Implemented progressive complexity management:
-   - Starts with simpler, more focused improvements
-   - Gradually increases complexity as successes accumulate
-   - Tracks complexity metrics for each component
-   - Avoids overwhelming changes that could break functionality
-
-3. Added self-evaluation capabilities:
-   - Evaluates its own code quality using static analysis
-   - Tracks metrics over time to measure improvement
-   - Identifies areas most in need of enhancement
-   - Generates reports on improvement progress
-
-4. Enhanced goal management:
-   - Supports multiple improvement goals with priorities
-   - Rotates focus areas to ensure balanced improvement
-   - Allows for specialized goals targeting specific subsystems
-   - Maintains a roadmap of planned improvements
-
-5. Improved resource efficiency:
-   - Implements intelligent caching of API responses
-   - Prioritizes changes with highest impact-to-cost ratio
-   - Adapts resource usage based on available API quota
-   - Schedules intensive operations during low-usage periods
-
-Previous enhancements:
-1. Added intelligent rate limit handling:
-   - Implements exponential backoff for 429 errors
-   - Automatically retries requests after appropriate waiting periods
-   - Preserves API quota by adapting to service limitations
-   - Maintains state between requests to optimize retry behavior
-
-2. Added comprehensive code validation to check for common issues in generated code:
+Enhancements in r7:
+1. Added comprehensive code validation to check for common issues in generated code:
    - Syntax errors
    - "...existing code" placeholders
    - Missing imports, classes, and functions
@@ -49,23 +12,23 @@ Previous enhancements:
    - Inconsistent indentation
    - Unclosed delimiters (quotes, parentheses, brackets)
 
-3. Implemented automatic fixing of common issues:
+2. Implemented automatic fixing of common issues:
    - Replacing "...existing code" placeholders with appropriate content
    - Adding missing docstrings and main execution blocks
    - Fixing missing imports
    - Handling truncated code
    - Fixing unclosed delimiters and string literals
 
-4. Added a retry mechanism with enhanced prompts:
+3. Added a retry mechanism with enhanced prompts:
    - Generates specific prompts addressing identified issues
    - Makes multiple attempts before falling back to automatic fixes
    - Saves intermediate versions with descriptive suffixes for debugging
 
-5. Improved prompt generation:
+4. Improved prompt generation:
    - Added specific guidelines to prevent common issues
    - Created enhanced prompts that address specific problems
 
-6. Added advanced incremental editing approach:
+5. Added advanced incremental editing approach:
    - Edits the same file in-place with automatic backups
    - Uses timed backoff strategy instead of fixed retry count
    - Implements multiple editing approaches when initial attempts fail
@@ -108,7 +71,7 @@ ENV_TOP_K = "TOP_K"
 DEFAULT_TOP_K = 40
 
 # Version control constants
-VERSION = "0.0.2-r1"
+VERSION = "0.0.1-r7"
 VERSION_HISTORY_DIR = Path(".adaptagen_versions")
 VERSION_METADATA_FILE = "version_metadata.json"
 
@@ -647,7 +610,6 @@ class Goal:
     """Base class for defining goals."""
     
     description: str = "No description provided"
-    priority: int = 5  # Default priority (1-10, 10 being highest)
     
     def __init__(self):
         """Initialize the goal and register it with the token registry."""
@@ -656,27 +618,12 @@ class Goal:
     def get_prompt(self, current_code: str, config: Config) -> str:
         """Generate a prompt for the AI based on the current code and this goal."""
         raise NotImplementedError("Subclasses must implement get_prompt method")
-    
-    def get_enhanced_prompt(self, current_code: str, config: Config, issues: List[str]) -> str:
-        """
-        Generate an enhanced prompt that specifically addresses identified issues.
-        
-        Args:
-            current_code: The current code
-            config: The configuration
-            issues: List of issues identified in a previous generation attempt
-            
-        Returns:
-            An enhanced prompt
-        """
-        raise NotImplementedError("Subclasses must implement get_enhanced_prompt method")
 
 
 class SelfEditGoal(Goal):
     """Goal for self-editing and improvement."""
     
     description = "Improve code structure, functionality, and robustness."
-    priority = 10  # Highest priority
     
     def get_prompt(self, current_code: str, config: Config) -> str:
         """Generate a prompt for self-editing."""
@@ -761,334 +708,6 @@ class SelfEditGoal(Goal):
         """
 
 
-class PerformanceGoal(Goal):
-    """Goal for improving performance and efficiency."""
-    
-    description = "Improve performance and efficiency of the code."
-    priority = 7
-    
-    def get_prompt(self, current_code: str, config: Config) -> str:
-        """Generate a prompt for performance optimization."""
-        return f"""
-        Optimize the performance of the following Python script:
-
-        ```python
-        {current_code}
-        ```
-
-        Focus on:
-        1. Algorithmic efficiency improvements
-        2. Reducing unnecessary computations
-        3. Optimizing resource usage (memory, CPU)
-        4. Improving I/O operations
-        5. Reducing redundant code execution
-
-        IMPORTANT GUIDELINES:
-        1. DO NOT use "...existing code" placeholders. Always include the complete code.
-        2. Ensure all imports from the original code are preserved.
-        3. Keep the docstring at the beginning and the main execution block at the end.
-        4. Maintain the VERSION constant and update it appropriately.
-        5. Preserve all existing class and function definitions.
-        6. Use consistent indentation (4 spaces per level).
-        7. Ensure all delimiters (quotes, parentheses, brackets) are properly closed.
-        8. The code must be syntactically correct and directly executable.
-        9. DO NOT sacrifice readability or maintainability for minor performance gains.
-
-        The script uses a token system to avoid attribute mismatches. Tokens are formatted as <TOKEN:NAME> 
-        and are registered in the TokenRegistry. Use this system when referring to configuration values 
-        or other important constants.
-
-        Return ONLY the improved code, directly executable.
-        """
-        
-    def get_enhanced_prompt(self, current_code: str, config: Config, issues: List[str]) -> str:
-        """Generate an enhanced prompt for performance optimization."""
-        issue_guidance = "\n        ".join([f"- {issue}" for issue in issues])
-        
-        return f"""
-        Optimize the performance of the following Python script, paying special attention to fixing these specific issues:
-        
-        {issue_guidance}
-
-        ```python
-        {current_code}
-        ```
-
-        Focus on:
-        1. Algorithmic efficiency improvements
-        2. Reducing unnecessary computations
-        3. Optimizing resource usage (memory, CPU)
-        4. Improving I/O operations
-        5. Reducing redundant code execution
-
-        CRITICAL REQUIREMENTS:
-        1. DO NOT use "...existing code" placeholders. Always include the complete code.
-        2. Ensure all imports from the original code are preserved.
-        3. Keep the docstring at the beginning and the main execution block at the end.
-        4. Maintain the VERSION constant and update it appropriately.
-        5. Preserve all existing class and function definitions.
-        6. Use consistent indentation (4 spaces per level).
-        7. Ensure all delimiters (quotes, parentheses, brackets) are properly closed.
-        8. The code must be syntactically correct and directly executable.
-        9. DO NOT sacrifice readability or maintainability for minor performance gains.
-
-        The script uses a token system to avoid attribute mismatches. Tokens are formatted as <TOKEN:NAME> 
-        and are registered in the TokenRegistry. Use this system when referring to configuration values 
-        or other important constants.
-
-        Return ONLY the improved code, directly executable.
-        """
-
-
-class DocumentationGoal(Goal):
-    """Goal for improving documentation and code clarity."""
-    
-    description = "Improve documentation and code clarity."
-    priority = 8
-    
-    def get_prompt(self, current_code: str, config: Config) -> str:
-        """Generate a prompt for documentation improvement."""
-        return f"""
-        Improve the documentation and clarity of the following Python script:
-
-        ```python
-        {current_code}
-        ```
-
-        Focus on:
-        1. Adding or improving docstrings for all classes, methods, and functions
-        2. Adding helpful comments for complex code sections
-        3. Improving variable and function naming for clarity
-        4. Adding type hints where appropriate
-        5. Ensuring consistent documentation style throughout
-
-        IMPORTANT GUIDELINES:
-        1. DO NOT use "...existing code" placeholders. Always include the complete code.
-        2. Ensure all imports from the original code are preserved.
-        3. Keep the docstring at the beginning and the main execution block at the end.
-        4. Maintain the VERSION constant and update it appropriately.
-        5. Preserve all existing class and function definitions.
-        6. Use consistent indentation (4 spaces per level).
-        7. Ensure all delimiters (quotes, parentheses, brackets) are properly closed.
-        8. The code must be syntactically correct and directly executable.
-        9. DO NOT change the functionality of the code.
-
-        The script uses a token system to avoid attribute mismatches. Tokens are formatted as <TOKEN:NAME> 
-        and are registered in the TokenRegistry. Use this system when referring to configuration values 
-        or other important constants.
-
-        Return ONLY the improved code, directly executable.
-        """
-        
-    def get_enhanced_prompt(self, current_code: str, config: Config, issues: List[str]) -> str:
-        """Generate an enhanced prompt for documentation improvement."""
-        issue_guidance = "\n        ".join([f"- {issue}" for issue in issues])
-        
-        return f"""
-        Improve the documentation and clarity of the following Python script, paying special attention to fixing these specific issues:
-        
-        {issue_guidance}
-
-        ```python
-        {current_code}
-        ```
-
-        Focus on:
-        1. Adding or improving docstrings for all classes, methods, and functions
-        2. Adding helpful comments for complex code sections
-        3. Improving variable and function naming for clarity
-        4. Adding type hints where appropriate
-        5. Ensuring consistent documentation style throughout
-
-        CRITICAL REQUIREMENTS:
-        1. DO NOT use "...existing code" placeholders. Always include the complete code.
-        2. Ensure all imports from the original code are preserved.
-        3. Keep the docstring at the beginning and the main execution block at the end.
-        4. Maintain the VERSION constant and update it appropriately.
-        5. Preserve all existing class and function definitions.
-        6. Use consistent indentation (4 spaces per level).
-        7. Ensure all delimiters (quotes, parentheses, brackets) are properly closed.
-        8. The code must be syntactically correct and directly executable.
-        9. DO NOT change the functionality of the code.
-
-        The script uses a token system to avoid attribute mismatches. Tokens are formatted as <TOKEN:NAME> 
-        and are registered in the TokenRegistry. Use this system when referring to configuration values 
-        or other important constants.
-
-        Return ONLY the improved code, directly executable.
-        """
-
-
-class FeatureGoal(Goal):
-    """Goal for adding new features."""
-    
-    description = "Add new features to enhance functionality."
-    priority = 6
-    
-    def __init__(self, feature_description: str = None):
-        """
-        Initialize the feature goal.
-        
-        Args:
-            feature_description: Description of the feature to add
-        """
-        super().__init__()
-        if feature_description:
-            self.description = feature_description
-    
-    def get_prompt(self, current_code: str, config: Config) -> str:
-        """Generate a prompt for adding new features."""
-        return f"""
-        Add new features to the following Python script:
-
-        ```python
-        {current_code}
-        ```
-
-        Focus on:
-        1. Adding useful new capabilities that align with the script's purpose
-        2. Ensuring new features integrate well with existing code
-        3. Maintaining the overall architecture and design principles
-        4. Adding appropriate documentation for new features
-        5. Including proper error handling for new functionality
-
-        IMPORTANT GUIDELINES:
-        1. DO NOT use "...existing code" placeholders. Always include the complete code.
-        2. Ensure all imports from the original code are preserved.
-        3. Keep the docstring at the beginning and the main execution block at the end.
-        4. Maintain the VERSION constant and update it appropriately.
-        5. Preserve all existing class and function definitions.
-        6. Use consistent indentation (4 spaces per level).
-        7. Ensure all delimiters (quotes, parentheses, brackets) are properly closed.
-        8. The code must be syntactically correct and directly executable.
-        9. DO NOT break existing functionality.
-
-        The script uses a token system to avoid attribute mismatches. Tokens are formatted as <TOKEN:NAME> 
-        and are registered in the TokenRegistry. Use this system when referring to configuration values 
-        or other important constants.
-
-        Return ONLY the improved code, directly executable.
-        """
-        
-    def get_enhanced_prompt(self, current_code: str, config: Config, issues: List[str]) -> str:
-        """Generate an enhanced prompt for adding new features."""
-        issue_guidance = "\n        ".join([f"- {issue}" for issue in issues])
-        
-        return f"""
-        Add new features to the following Python script, paying special attention to fixing these specific issues:
-        
-        {issue_guidance}
-
-        ```python
-        {current_code}
-        ```
-
-        Focus on:
-        1. Adding useful new capabilities that align with the script's purpose
-        2. Ensuring new features integrate well with existing code
-        3. Maintaining the overall architecture and design principles
-        4. Adding appropriate documentation for new features
-        5. Including proper error handling for new functionality
-
-        CRITICAL REQUIREMENTS:
-        1. DO NOT use "...existing code" placeholders. Always include the complete code.
-        2. Ensure all imports from the original code are preserved.
-        3. Keep the docstring at the beginning and the main execution block at the end.
-        4. Maintain the VERSION constant and update it appropriately.
-        5. Preserve all existing class and function definitions.
-        6. Use consistent indentation (4 spaces per level).
-        7. Ensure all delimiters (quotes, parentheses, brackets) are properly closed.
-        8. The code must be syntactically correct and directly executable.
-        9. DO NOT break existing functionality.
-
-        The script uses a token system to avoid attribute mismatches. Tokens are formatted as <TOKEN:NAME> 
-        and are registered in the TokenRegistry. Use this system when referring to configuration values 
-        or other important constants.
-
-        Return ONLY the improved code, directly executable.
-        """
-
-
-class GoalManager:
-    """
-    Manages multiple improvement goals with priorities.
-    Rotates focus areas to ensure balanced improvement.
-    """
-    
-    def __init__(self):
-        """Initialize the goal manager."""
-        self.goals = []
-        self.current_goal_index = 0
-        self.goal_history = []
-        
-        # Add default goals
-        self.add_goal(SelfEditGoal())
-        self.add_goal(PerformanceGoal())
-        self.add_goal(DocumentationGoal())
-    
-    def add_goal(self, goal: Goal) -> None:
-        """
-        Add a goal to the manager.
-        
-        Args:
-            goal: The goal to add
-        """
-        self.goals.append(goal)
-        # Sort goals by priority (highest first)
-        self.goals.sort(key=lambda g: g.priority, reverse=True)
-    
-    def get_current_goal(self) -> Goal:
-        """
-        Get the current goal.
-        
-        Returns:
-            The current goal
-        """
-        if not self.goals:
-            # Add default goal if none exist
-            self.add_goal(SelfEditGoal())
-        
-        return self.goals[self.current_goal_index]
-    
-    def rotate_goal(self) -> Goal:
-        """
-        Rotate to the next goal.
-        
-        Returns:
-            The new current goal
-        """
-        if not self.goals:
-            # Add default goal if none exist
-            self.add_goal(SelfEditGoal())
-            return self.goals[0]
-        
-        # Record the current goal in history
-        self.goal_history.append({
-            "goal": self.goals[self.current_goal_index].description,
-            "timestamp": datetime.datetime.now().strftime("%Y%m%d%H%M%S")
-        })
-        
-        # Move to the next goal
-        self.current_goal_index = (self.current_goal_index + 1) % len(self.goals)
-        
-        return self.goals[self.current_goal_index]
-    
-    def get_goal_by_name(self, name: str) -> Optional[Goal]:
-        """
-        Get a goal by its class name.
-        
-        Args:
-            name: Name of the goal class
-            
-        Returns:
-            The goal if found, None otherwise
-        """
-        for goal in self.goals:
-            if goal.__class__.__name__ == name:
-                return goal
-        return None
-
-
 class GeminiAPI:
     """Interface for interacting with the Gemini API."""
     
@@ -1102,11 +721,6 @@ class GeminiAPI:
             model_name=config.model_name,
             generation_config=config.get_generation_config()
         )
-        
-        # Rate limiting parameters
-        self.rate_limit_encountered = False
-        self.rate_limit_backoff = [5, 10, 30, 60, 120, 300, 600]  # Exponential backoff in seconds
-        self.rate_limit_attempt = 0
     
     def generate_response(self, prompt: str) -> Optional[str]:
         """Generate a response from the AI model based on the given prompt."""
@@ -1119,19 +733,7 @@ class GeminiAPI:
             # Replace valid tokens
             prompt = TokenRegistry.replace_tokens(prompt)
             
-            # If we've hit rate limits before, apply backoff
-            if self.rate_limit_encountered and self.rate_limit_attempt < len(self.rate_limit_backoff):
-                backoff_time = self.rate_limit_backoff[self.rate_limit_attempt]
-                logger.info(f"Rate limit previously encountered. Backing off for {backoff_time} seconds before trying again.")
-                import time
-                time.sleep(backoff_time)
-            
             response = self.model.generate_content(prompt)
-            
-            # Reset rate limit flags on successful request
-            self.rate_limit_encountered = False
-            self.rate_limit_attempt = 0
-            
             code = response.text
             
             # Check for incomplete code and fix if possible
@@ -1139,27 +741,6 @@ class GeminiAPI:
             
             return code
         except Exception as e:
-            error_str = str(e)
-            
-            # Handle rate limiting errors (429)
-            if "429" in error_str and "Resource has been exhausted" in error_str:
-                self.rate_limit_encountered = True
-                
-                if self.rate_limit_attempt < len(self.rate_limit_backoff):
-                    backoff_time = self.rate_limit_backoff[self.rate_limit_attempt]
-                    logger.warning(f"Rate limit encountered (429). Backing off for {backoff_time} seconds and retrying.")
-                    
-                    import time
-                    time.sleep(backoff_time)
-                    
-                    # Increment for next time
-                    self.rate_limit_attempt += 1
-                    
-                    # Recursive retry after backoff
-                    return self.generate_response(prompt)
-                else:
-                    logger.error(f"Rate limit (429) exceeded maximum retry attempts ({len(self.rate_limit_backoff)})")
-            
             logger.error(f"Gemini API error: {e}")
             return None
             
@@ -1416,453 +997,6 @@ class VersionManager:
                 break
         return '\n'.join(lines)
 
-class LearningDatabase:
-    """
-    Database for tracking and learning from past improvements.
-    Analyzes patterns in successful and failed edits to guide future improvements.
-    """
-    
-    def __init__(self, db_file: Path = Path(".adaptagen_learning.json")):
-        """Initialize the learning database."""
-        self.db_file = db_file
-        self.data = self._load_data()
-        
-        # Initialize database structure if it doesn't exist
-        if "component_history" not in self.data:
-            self.data["component_history"] = {}
-        if "approach_success_rates" not in self.data:
-            self.data["approach_success_rates"] = {}
-        if "prompt_patterns" not in self.data:
-            self.data["prompt_patterns"] = {"successful": [], "failed": []}
-        if "complexity_metrics" not in self.data:
-            self.data["complexity_metrics"] = {}
-        if "improvement_metrics" not in self.data:
-            self.data["improvement_metrics"] = {"overall": []}
-        
-        # Save initialized structure
-        self._save_data()
-    
-    def _load_data(self) -> Dict:
-        """Load data from the database file."""
-        if self.db_file.exists():
-            try:
-                with open(self.db_file, 'r') as f:
-                    return json.load(f)
-            except Exception as e:
-                logger.error(f"Error loading learning database: {e}")
-                return {}
-        return {}
-    
-    def _save_data(self) -> None:
-        """Save data to the database file."""
-        try:
-            with open(self.db_file, 'w') as f:
-                json.dump(self.data, f, indent=2)
-        except Exception as e:
-            logger.error(f"Error saving learning database: {e}")
-    
-    def record_edit_attempt(self, component_name: str, approach: str, 
-                           success: bool, code_before: str, code_after: str = None,
-                           error_message: str = None) -> None:
-        """
-        Record an edit attempt in the database.
-        
-        Args:
-            component_name: Name of the component that was edited
-            approach: The editing approach used
-            success: Whether the edit was successful
-            code_before: The code before the edit
-            code_after: The code after the edit (if successful)
-            error_message: Error message (if failed)
-        """
-        # Initialize component history if it doesn't exist
-        if component_name not in self.data["component_history"]:
-            self.data["component_history"][component_name] = {
-                "attempts": 0,
-                "successes": 0,
-                "failures": 0,
-                "last_success": None,
-                "last_failure": None,
-                "approaches": {}
-            }
-        
-        # Update component history
-        component_data = self.data["component_history"][component_name]
-        component_data["attempts"] += 1
-        
-        # Initialize approach data if it doesn't exist
-        if approach not in component_data["approaches"]:
-            component_data["approaches"][approach] = {
-                "attempts": 0,
-                "successes": 0,
-                "failures": 0
-            }
-        
-        # Update approach data for this component
-        approach_data = component_data["approaches"][approach]
-        approach_data["attempts"] += 1
-        
-        # Initialize global approach data if it doesn't exist
-        if approach not in self.data["approach_success_rates"]:
-            self.data["approach_success_rates"][approach] = {
-                "attempts": 0,
-                "successes": 0,
-                "failures": 0
-            }
-        
-        # Update global approach data
-        global_approach_data = self.data["approach_success_rates"][approach]
-        global_approach_data["attempts"] += 1
-        
-        # Record timestamp
-        timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
-        
-        # Record success or failure
-        if success:
-            component_data["successes"] += 1
-            component_data["last_success"] = timestamp
-            approach_data["successes"] += 1
-            global_approach_data["successes"] += 1
-            
-            # Calculate complexity metrics
-            complexity_before = self._calculate_complexity(code_before)
-            complexity_after = self._calculate_complexity(code_after)
-            
-            # Record complexity change
-            if component_name not in self.data["complexity_metrics"]:
-                self.data["complexity_metrics"][component_name] = []
-            
-            self.data["complexity_metrics"][component_name].append({
-                "timestamp": timestamp,
-                "before": complexity_before,
-                "after": complexity_after,
-                "change": {k: complexity_after[k] - complexity_before[k] for k in complexity_before}
-            })
-            
-            # Extract successful patterns from the edit
-            self._extract_patterns(code_before, code_after, success=True)
-        else:
-            component_data["failures"] += 1
-            component_data["last_failure"] = timestamp
-            approach_data["failures"] += 1
-            global_approach_data["failures"] += 1
-            
-            # Record error message
-            if error_message:
-                if "error_patterns" not in component_data:
-                    component_data["error_patterns"] = []
-                
-                component_data["error_patterns"].append({
-                    "timestamp": timestamp,
-                    "approach": approach,
-                    "error": error_message
-                })
-        
-        # Save updated data
-        self._save_data()
-    
-    def get_best_approach_for_component(self, component_name: str) -> str:
-        """
-        Get the best approach for a specific component based on past performance.
-        
-        Args:
-            component_name: Name of the component
-            
-        Returns:
-            Name of the best approach
-        """
-        # If we have history for this component, use it
-        if component_name in self.data["component_history"]:
-            component_data = self.data["component_history"][component_name]
-            
-            # If we have approach data, find the best one
-            if component_data["approaches"]:
-                best_approach = None
-                best_success_rate = -1
-                
-                for approach, data in component_data["approaches"].items():
-                    if data["attempts"] > 0:
-                        success_rate = data["successes"] / data["attempts"]
-                        if success_rate > best_success_rate:
-                            best_success_rate = success_rate
-                            best_approach = approach
-                
-                if best_approach and best_success_rate > 0:
-                    return best_approach
-        
-        # Fall back to global best approach
-        return self.get_best_approach_overall()
-    
-    def get_best_approach_overall(self) -> str:
-        """
-        Get the best approach overall based on past performance.
-        
-        Returns:
-            Name of the best approach
-        """
-        best_approach = "standard"  # Default
-        best_success_rate = -1
-        
-        for approach, data in self.data["approach_success_rates"].items():
-            if data["attempts"] > 0:
-                success_rate = data["successes"] / data["attempts"]
-                if success_rate > best_success_rate:
-                    best_success_rate = success_rate
-                    best_approach = approach
-        
-        return best_approach
-    
-    def prioritize_components(self, components: Dict[str, str]) -> List[Tuple[str, str]]:
-        """
-        Prioritize components based on historical success rates and complexity.
-        
-        Args:
-            components: Dictionary mapping component names to their code
-            
-        Returns:
-            List of (component_name, component_code) tuples in priority order
-        """
-        component_scores = []
-        
-        for name, code in components.items():
-            # Calculate base score
-            score = 0.5  # Default middle score
-            
-            # Adjust based on history if available
-            if name in self.data["component_history"]:
-                history = self.data["component_history"][name]
-                
-                # Components with higher success rates get higher priority
-                if history["attempts"] > 0:
-                    success_rate = history["successes"] / history["attempts"]
-                    score = success_rate
-                
-                # Boost score for components that haven't been successfully edited recently
-                if not history["last_success"] and history["attempts"] < 3:
-                    score += 0.2  # Boost for never-succeeded components with few attempts
-            else:
-                # Boost score for never-attempted components
-                score += 0.1
-            
-            # Adjust based on complexity
-            complexity = self._calculate_complexity(code)
-            
-            # Prefer simpler components first (they're more likely to succeed)
-            if complexity["cyclomatic"] < 5:
-                score += 0.1
-            elif complexity["cyclomatic"] > 15:
-                score -= 0.1
-                
-            # Prefer components with higher potential impact
-            if complexity["lines"] > 50:
-                score += 0.05  # Larger components have more potential for improvement
-            
-            component_scores.append((name, code, score))
-        
-        # Sort by score in descending order
-        sorted_components = sorted(component_scores, key=lambda x: x[2], reverse=True)
-        
-        # Return just the name and code
-        return [(name, code) for name, code, _ in sorted_components]
-    
-    def enhance_prompt_for_component(self, component_name: str, base_prompt: str) -> str:
-        """
-        Enhance a prompt based on learning from past successes and failures.
-        
-        Args:
-            component_name: Name of the component
-            base_prompt: Base prompt to enhance
-            
-        Returns:
-            Enhanced prompt
-        """
-        enhancements = []
-        
-        # Add component-specific guidance if available
-        if component_name in self.data["component_history"]:
-            history = self.data["component_history"][component_name]
-            
-            # Add warnings about common errors
-            if "error_patterns" in history and history["error_patterns"]:
-                common_errors = {}
-                for error_data in history["error_patterns"]:
-                    error = error_data["error"]
-                    if error in common_errors:
-                        common_errors[error] += 1
-                    else:
-                        common_errors[error] = 1
-                
-                # Get the most common errors
-                top_errors = sorted(common_errors.items(), key=lambda x: x[1], reverse=True)[:2]
-                if top_errors:
-                    error_guidance = "IMPORTANT - Avoid these common issues:\n"
-                    for error, _ in top_errors:
-                        error_guidance += f"- {error}\n"
-                    enhancements.append(error_guidance)
-        
-        # Add successful patterns
-        if self.data["prompt_patterns"]["successful"]:
-            # Get the top 3 successful patterns
-            top_patterns = self.data["prompt_patterns"]["successful"][:3]
-            if top_patterns:
-                pattern_guidance = "Consider these successful patterns:\n"
-                for pattern in top_patterns:
-                    pattern_guidance += f"- {pattern}\n"
-                enhancements.append(pattern_guidance)
-        
-        # Combine enhancements with base prompt
-        if enhancements:
-            # Find the right place to insert enhancements (before the final instructions)
-            lines = base_prompt.split('\n')
-            insert_point = -1
-            
-            # Look for the "IMPORTANT:" section or similar
-            for i, line in enumerate(lines):
-                if "IMPORTANT:" in line or "CRITICAL" in line or "GUIDELINES:" in line:
-                    insert_point = i
-                    break
-            
-            if insert_point >= 0:
-                # Insert enhancements before the guidelines
-                enhanced_lines = lines[:insert_point] + enhancements + lines[insert_point:]
-                return '\n'.join(enhanced_lines)
-            else:
-                # Append to the end if no suitable insertion point found
-                return base_prompt + '\n\n' + '\n'.join(enhancements)
-        
-        return base_prompt
-    
-    def _calculate_complexity(self, code: str) -> Dict[str, float]:
-        """
-        Calculate complexity metrics for a piece of code.
-        
-        Args:
-            code: The code to analyze
-            
-        Returns:
-            Dictionary of complexity metrics
-        """
-        if not code:
-            return {"lines": 0, "cyclomatic": 0, "nesting": 0}
-        
-        lines = code.split('\n')
-        non_empty_lines = [line for line in lines if line.strip()]
-        
-        # Simple cyclomatic complexity estimation
-        decision_points = 0
-        for line in non_empty_lines:
-            if re.search(r'\bif\b|\bfor\b|\bwhile\b|\belif\b|\bexcept\b|\bwith\b', line):
-                decision_points += 1
-        
-        # Simple nesting level estimation
-        max_indent = 0
-        for line in non_empty_lines:
-            indent = len(line) - len(line.lstrip())
-            max_indent = max(max_indent, indent)
-        
-        # Normalize nesting level (assuming 4 spaces per level)
-        nesting_level = max_indent / 4 if max_indent > 0 else 0
-        
-        return {
-            "lines": len(non_empty_lines),
-            "cyclomatic": decision_points,
-            "nesting": nesting_level
-        }
-    
-    def _extract_patterns(self, code_before: str, code_after: str, success: bool) -> None:
-        """
-        Extract patterns from successful or failed edits.
-        
-        Args:
-            code_before: Code before the edit
-            code_after: Code after the edit
-            success: Whether the edit was successful
-        """
-        if not code_before or not code_after:
-            return
-        
-        # This is a simplified implementation
-        # A more sophisticated approach would use AST parsing to identify
-        # specific transformation patterns
-        
-        # For now, just look for simple patterns like added error handling
-        if success:
-            # Check for added try/except blocks
-            if "try:" in code_after and "try:" not in code_before:
-                self.data["prompt_patterns"]["successful"].append(
-                    "Adding proper error handling with try/except blocks"
-                )
-            
-            # Check for added logging
-            if "logger." in code_after and "logger." not in code_before:
-                self.data["prompt_patterns"]["successful"].append(
-                    "Adding logging statements for better observability"
-                )
-            
-            # Check for added docstrings
-            if '"""' in code_after and '"""' not in code_before:
-                self.data["prompt_patterns"]["successful"].append(
-                    "Adding or improving docstrings"
-                )
-            
-            # Check for added type hints
-            type_hint_pattern = r':\s*[A-Za-z\[\]\'\"]+\s*='
-            if re.search(type_hint_pattern, code_after) and not re.search(type_hint_pattern, code_before):
-                self.data["prompt_patterns"]["successful"].append(
-                    "Adding type hints for better code clarity"
-                )
-            
-            # Deduplicate patterns
-            self.data["prompt_patterns"]["successful"] = list(set(self.data["prompt_patterns"]["successful"]))
-    
-    def generate_improvement_report(self) -> str:
-        """
-        Generate a report on improvement progress.
-        
-        Returns:
-            Report text
-        """
-        report = "AdaptaGen Improvement Report\n"
-        report += "=========================\n\n"
-        
-        # Overall statistics
-        total_attempts = sum(comp["attempts"] for comp in self.data["component_history"].values())
-        total_successes = sum(comp["successes"] for comp in self.data["component_history"].values())
-        success_rate = total_successes / total_attempts if total_attempts > 0 else 0
-        
-        report += f"Overall Statistics:\n"
-        report += f"- Total edit attempts: {total_attempts}\n"
-        report += f"- Successful edits: {total_successes}\n"
-        report += f"- Success rate: {success_rate:.2%}\n\n"
-        
-        # Approach effectiveness
-        report += f"Approach Effectiveness:\n"
-        for approach, data in self.data["approach_success_rates"].items():
-            if data["attempts"] > 0:
-                approach_success_rate = data["successes"] / data["attempts"]
-                report += f"- {approach}: {approach_success_rate:.2%} ({data['successes']}/{data['attempts']})\n"
-        
-        report += "\n"
-        
-        # Most improved components
-        if self.data["complexity_metrics"]:
-            report += f"Most Improved Components:\n"
-            component_improvements = []
-            
-            for component, metrics in self.data["complexity_metrics"].items():
-                if metrics:
-                    # Calculate total improvement
-                    total_improvement = sum(m["change"].get("cyclomatic", 0) for m in metrics)
-                    component_improvements.append((component, total_improvement))
-            
-            # Sort by improvement (most improved first)
-            sorted_improvements = sorted(component_improvements, key=lambda x: x[1], reverse=True)
-            
-            for component, improvement in sorted_improvements[:5]:
-                report += f"- {component}: {improvement} complexity reduction\n"
-        
-        return report
-
 class IncrementalEditor:
     """
     Manages incremental editing of code with verification after each change.
@@ -1871,7 +1005,7 @@ class IncrementalEditor:
     
     def __init__(self, original_code: str, code_manager: CodeManager, 
                  version_control: VersionControl, gemini_api: GeminiAPI,
-                 target_file: Path = None, learning_db: LearningDatabase = None):
+                 target_file: Path = None):
         """Initialize the incremental editor."""
         self.original_code = original_code
         self.current_code = original_code
@@ -1889,17 +1023,6 @@ class IncrementalEditor:
             self._approach_conservative_edit,
             self._approach_focused_bugfix
         ]
-        
-        # Initialize or use provided learning database
-        self.learning_db = learning_db if learning_db else LearningDatabase()
-        
-        # Track complexity progression
-        self.initial_complexity = self._calculate_overall_complexity(original_code)
-        self.current_complexity = self.initial_complexity.copy()
-        
-    def _calculate_overall_complexity(self, code: str) -> Dict[str, float]:
-        """Calculate overall complexity metrics for the entire codebase."""
-        return self.learning_db._calculate_complexity(code)
         
     def get_component_edit_prompt(self, component_name: str, component_code: str, 
                                   approach: str = "standard") -> str:
@@ -1961,12 +1084,7 @@ class IncrementalEditor:
         5. Do not add dependencies on components that don't exist
         """
         
-        prompt = base_prompt + focus + guidelines + "\n\nReturn the complete improved component code."
-        
-        # Enhance the prompt based on learning
-        enhanced_prompt = self.learning_db.enhance_prompt_for_component(component_name, prompt)
-        
-        return enhanced_prompt
+        return base_prompt + focus + guidelines + "\n\nReturn the complete improved component code."
     
     def extract_components(self) -> Dict[str, str]:
         """
@@ -2129,30 +1247,9 @@ class IncrementalEditor:
         """
         import time
         
-        # Get the best approach for this component based on learning
-        best_approach = self.learning_db.get_best_approach_for_component(component_name)
-        
-        # Reorder approaches to try the best one first
-        approach_funcs = {
-            "standard": self._approach_standard_edit,
-            "simplified": self._approach_simplified_edit,
-            "conservative": self._approach_conservative_edit,
-            "bugfix": self._approach_focused_bugfix
-        }
-        
-        # Create a new ordered list of approaches
-        ordered_approaches = []
-        if best_approach in approach_funcs:
-            ordered_approaches.append((best_approach, approach_funcs[best_approach]))
-            
-        # Add the rest of the approaches
-        for name, func in approach_funcs.items():
-            if name != best_approach:
-                ordered_approaches.append((name, func))
-        
         # Try each approach
-        for approach_idx, (approach_name, approach_func) in enumerate(ordered_approaches):
-            logger.info(f"Trying approach {approach_idx+1}/{len(ordered_approaches)} ({approach_name}) for {component_name}")
+        for approach_idx, approach_func in enumerate(self.edit_approaches):
+            logger.info(f"Trying approach {approach_idx+1}/{len(self.edit_approaches)} for {component_name}")
             
             # Try with backoff
             for attempt, backoff_time in enumerate(self.backoff_times):
@@ -2161,31 +1258,7 @@ class IncrementalEditor:
                 # Generate improved component
                 improved_component = approach_func(component_name, component_code)
                 
-                # If we got None back, it might be due to rate limiting which is already handled
-                # by the GeminiAPI class with its own backoff strategy. In this case, we should
-                # pause our attempts for a while to let the rate limit reset.
                 if not improved_component:
-                    # Check if the API client has encountered rate limits
-                    if self.gemini_api.rate_limit_encountered:
-                        logger.warning(f"Rate limit encountered while processing {component_name}. Pausing component editing.")
-                        
-                        # Record the failed attempt in the learning database
-                        self.learning_db.record_edit_attempt(
-                            component_name,
-                            approach_name,
-                            success=False,
-                            code_before=component_code,
-                            error_message="Rate limit exceeded"
-                        )
-                        
-                        # Wait longer than the API's own backoff to ensure we're not hammering the API
-                        extended_wait = 600  # 10 minutes
-                        logger.info(f"Waiting {extended_wait} seconds before trying another component...")
-                        time.sleep(extended_wait)
-                        
-                        # Skip to the next component rather than continuing to retry this one
-                        return False, self.current_code
-                    
                     logger.warning(f"Failed to generate improved version for {component_name}")
                     time.sleep(backoff_time)
                     continue
@@ -2196,35 +1269,13 @@ class IncrementalEditor:
                 # Verify the new code
                 if self.verify_code(new_code):
                     logger.info(f"Successfully improved component: {component_name}")
-                    
-                    # Record the successful attempt in the learning database
-                    self.learning_db.record_edit_attempt(
-                        component_name,
-                        approach_name,
-                        success=True,
-                        code_before=component_code,
-                        code_after=improved_component
-                    )
-                    
-                    # Update complexity metrics
-                    self.current_complexity = self._calculate_overall_complexity(new_code)
-                    
                     return True, new_code
-                
-                # Record the failed attempt in the learning database
-                self.learning_db.record_edit_attempt(
-                    component_name,
-                    approach_name,
-                    success=False,
-                    code_before=component_code,
-                    error_message="Verification failed"
-                )
                 
                 logger.warning(f"Verification failed for {component_name}, backing off for {backoff_time}s")
                 time.sleep(backoff_time)
             
             # If we've tried all backoff times with this approach and failed, try the next approach
-            logger.warning(f"All attempts with approach {approach_name} failed for {component_name}")
+            logger.warning(f"All attempts with approach {approach_idx+1} failed for {component_name}")
         
         # If all approaches failed, return failure
         logger.error(f"All approaches failed for {component_name}")
@@ -2264,49 +1315,15 @@ class IncrementalEditor:
         components = self.extract_components()
         logger.info(f"Extracted {len(components)} components for incremental editing")
         
-        # Prioritize components using the learning database
-        sorted_components = self.learning_db.prioritize_components(components)
-        logger.info(f"Prioritized {len(sorted_components)} components based on learning history")
-        
-        # Track rate limit occurrences
-        rate_limit_count = 0
-        max_rate_limit_threshold = 3  # After this many rate limits, we'll change strategy
+        # Sort components by size (smaller first for faster iterations)
+        sorted_components = sorted(components.items(), key=lambda x: len(x[1]))
         
         # Process each component
-        component_index = 0
-        while component_index < len(sorted_components):
-            component_name, component_code = sorted_components[component_index]
-            logger.info(f"Processing component: {component_name} ({component_index+1}/{len(sorted_components)})")
-            
-            # Check if we've hit too many rate limits and should adjust strategy
-            if rate_limit_count >= max_rate_limit_threshold:
-                logger.warning(f"Hit rate limit threshold ({max_rate_limit_threshold}). Switching to conservative approach only.")
-                # Override the edit approaches to only use the most conservative one
-                self.edit_approaches = [self._approach_conservative_edit]
-                
-                # Also increase the backoff times
-                self.backoff_times = [60, 300, 600]  # 1 min, 5 min, 10 min
-                
-                # Reset the counter so we don't keep logging this
-                rate_limit_count = 0
+        for component_name, component_code in sorted_components:
+            logger.info(f"Processing component: {component_name}")
             
             # Try to edit the component
             success, new_code = self.try_edit_component(component_name, component_code)
-            
-            # Check if we hit a rate limit
-            if self.gemini_api.rate_limit_encountered:
-                rate_limit_count += 1
-                
-                # If we've hit multiple rate limits, start skipping components
-                if rate_limit_count >= 2:
-                    # Skip ahead to process only every Nth component
-                    skip_factor = rate_limit_count
-                    next_index = component_index + skip_factor
-                    
-                    if next_index < len(sorted_components):
-                        logger.warning(f"Multiple rate limits encountered. Skipping ahead to component {next_index+1}.")
-                        component_index = next_index
-                        continue
             
             if success:
                 self.current_code = new_code
@@ -2330,13 +1347,6 @@ class IncrementalEditor:
                     "status": "failed",
                     "timestamp": datetime.datetime.now().strftime("%Y%m%d%H%M%S")
                 })
-            
-            # Move to the next component
-            component_index += 1
-        
-        # Generate and log improvement report
-        improvement_report = self.learning_db.generate_improvement_report()
-        logger.info(f"Improvement Report:\n{improvement_report}")
         
         logger.info(f"Incremental editing completed. Successful edits: {self.successful_edits}, Failed edits: {self.failed_edits}")
         return self.current_code
@@ -2351,38 +1361,20 @@ class AdaptaGen:
         self.code_manager = CodeManager()
         self.version_control = VersionControl()
         self.version_manager = VersionManager()
-        self.goal_manager = GoalManager()
-        self.learning_db = LearningDatabase()
+        self.current_goal = SelfEditGoal()
         
         # Register with token registry
         TokenRegistry.register("ADAPTAGEN", self.__class__.__name__)
     
-    def run(self, increment_type: str = 'revision', use_incremental: bool = False, 
-            goal_name: str = None) -> None:
+    def run(self, increment_type: str = 'revision', use_incremental: bool = False) -> None:
         """
         Execute the self-modification process.
         
         Args:
             increment_type: Type of version increment ('major', 'minor', 'patch', or 'revision')
             use_incremental: Whether to use incremental editing instead of full regeneration
-            goal_name: Name of the goal to use (if None, use current goal)
         """
-        # Set the current goal if specified
-        if goal_name:
-            goal = self.goal_manager.get_goal_by_name(goal_name)
-            if not goal:
-                logger.warning(f"Goal {goal_name} not found. Using current goal.")
-                goal = self.goal_manager.get_current_goal()
-        else:
-            # Get the current goal or rotate to the next one
-            if self.version_control.get_version_history():
-                # If we have previous versions, rotate to the next goal
-                goal = self.goal_manager.rotate_goal()
-            else:
-                # For the first run, use the current goal (highest priority)
-                goal = self.goal_manager.get_current_goal()
-        
-        logger.info(f"Starting AdaptaGen {VERSION} with goal: {goal.description}")
+        logger.info(f"Starting AdaptaGen {VERSION} with goal: {self.current_goal.description}")
         
         # Read the current source code
         current_filepath = Path(inspect.getfile(inspect.currentframe()))
@@ -2414,14 +1406,13 @@ class AdaptaGen:
                 logger.error(f"Failed to create backup: {e}")
                 return
             
-            # Initialize the incremental editor with the target file and learning database
+            # Initialize the incremental editor with the target file
             incremental_editor = IncrementalEditor(
                 current_code, 
                 self.code_manager, 
                 self.version_control,
                 self.gemini_api,
-                target_filepath,
-                self.learning_db
+                target_filepath
             )
             
             try:
@@ -2459,7 +1450,7 @@ class AdaptaGen:
         
         # Traditional approach (full regeneration)
         # Generate a prompt based on the current goal
-        prompt = goal.get_prompt(current_code, self.config)
+        prompt = self.current_goal.get_prompt(current_code, self.config)
         
         # Get AI-generated improvements
         logger.info("Generating improved version using AI...")
@@ -2492,7 +1483,7 @@ class AdaptaGen:
                         logger.info(f"Attempting to regenerate code (retry {retry_count}/{max_retries})...")
                         
                         # Generate an enhanced prompt that addresses the specific issues
-                        enhanced_prompt = goal.get_enhanced_prompt(current_code, self.config, issues)
+                        enhanced_prompt = self.current_goal.get_enhanced_prompt(current_code, self.config, issues)
                         
                         # Save the problematic code for reference
                         self.version_control.save_version(
@@ -2554,7 +1545,7 @@ class AdaptaGen:
                     )
                     
                     # Create an enhanced prompt that specifically mentions the syntax error
-                    syntax_error_prompt = goal.get_enhanced_prompt(
+                    syntax_error_prompt = self.current_goal.get_enhanced_prompt(
                         current_code, 
                         self.config, 
                         [f"Syntax error: {e}"]
@@ -2600,15 +1591,6 @@ class AdaptaGen:
         logger.info("Version history:")
         for version in versions:
             logger.info(f"- {version['version']} ({version['timestamp']}): {version['path']}")
-            
-    def generate_improvement_report(self) -> str:
-        """
-        Generate a comprehensive improvement report.
-        
-        Returns:
-            Report text
-        """
-        return self.learning_db.generate_improvement_report()
 
 
 def main():
@@ -2622,12 +1604,6 @@ def main():
                             default='revision', help='Type of version increment')
         parser.add_argument('--test', action='store_true',
                             help='Run in test mode to verify functionality')
-        parser.add_argument('--goal', type=str,
-                            help='Specify a goal to use (SelfEditGoal, PerformanceGoal, DocumentationGoal, FeatureGoal)')
-        parser.add_argument('--report', action='store_true',
-                            help='Generate and display an improvement report')
-        parser.add_argument('--list-versions', action='store_true',
-                            help='List all versions in the version history')
         args = parser.parse_args()
         
         # Test mode - just verify the script can be imported and run basic functions
@@ -2639,25 +1615,9 @@ def main():
         # Initialize configuration from environment variables
         config = Config.from_env()
         
-        # Create AdaptaGen instance
+        # Create and run AdaptaGen
         adaptagen = AdaptaGen(config)
-        
-        # Handle specific commands
-        if args.list_versions:
-            adaptagen.list_versions()
-            return
-            
-        if args.report:
-            report = adaptagen.generate_improvement_report()
-            print(report)
-            return
-        
-        # Run the main process
-        adaptagen.run(
-            increment_type=args.version_type, 
-            use_incremental=args.incremental,
-            goal_name=args.goal
-        )
+        adaptagen.run(increment_type=args.version_type, use_incremental=args.incremental)
         
     except ValueError as e:
         logger.error(e)

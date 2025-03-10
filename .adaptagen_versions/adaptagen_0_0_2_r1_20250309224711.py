@@ -1680,7 +1680,7 @@ class LearningDatabase:
         
         # Add component-specific guidance if available
         if component_name in self.data["component_history"]:
-            history = self.data["component_history"][component_name]
+            history = self.data["component_history"][name]
             
             # Add warnings about common errors
             if "error_patterns" in history and history["error_patterns"]:

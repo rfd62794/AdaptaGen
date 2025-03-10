@@ -209,13 +209,167 @@
       "hash": "65fd1fb08857b64807174ad63aab5a5b4cabb0c558a7d488e8e6879a09395b27",
       "filename": "adaptagen_0_0_2_r2_syntax_error_20250309224413.py",
       "path": ".adaptagen_versions\\adaptagen_0_0_2_r2_syntax_error_20250309224413.py"
+    },
+    {
+      "version": "0.0.2-r1",
+      "timestamp": "20250309224627",
+      "hash": "a5e8c172e70435efae9d9ccc8a9ae401ccec3756b412fd91c0e385348e4c40c1",
+      "filename": "adaptagen_0_0_2_r1_20250309224627.py",
+      "path": ".adaptagen_versions\\adaptagen_0_0_2_r1_20250309224627.py"
+    },
+    {
+      "version": "0.0.2-r2-retry1_syntax_error",
+      "timestamp": "20250309224654",
+      "hash": "4d4e63cd92f99449c4fd81416cb28b685f0e72eea3c7c8302be97bbc482e6101",
+      "filename": "adaptagen_0_0_2_r2_retry1_syntax_error_20250309224654.py",
+      "path": ".adaptagen_versions\\adaptagen_0_0_2_r2_retry1_syntax_error_20250309224654.py"
+    },
+    {
+      "version": "0.0.2-r1",
+      "timestamp": "20250309224711",
+      "hash": "a5e8c172e70435efae9d9ccc8a9ae401ccec3756b412fd91c0e385348e4c40c1",
+      "filename": "adaptagen_0_0_2_r1_20250309224711.py",
+      "path": ".adaptagen_versions\\adaptagen_0_0_2_r1_20250309224711.py"
+    },
+    {
+      "version": "0.0.2-r2-retry2_syntax_error",
+      "timestamp": "20250309224721",
+      "hash": "e23fbd75cb074b35db6e364a479740460a93fdc991fa0abb81d6d910604ab46d",
+      "filename": "adaptagen_0_0_2_r2_retry2_syntax_error_20250309224721.py",
+      "path": ".adaptagen_versions\\adaptagen_0_0_2_r2_retry2_syntax_error_20250309224721.py"
+    },
+    {
+      "version": "0.0.2-r2-syntax_error",
+      "timestamp": "20250309224847",
+      "hash": "c0f3575115490b4496ab4c54ccc5ef5d9fa675413023c3697fe3f0613f47d3aa",
+      "filename": "adaptagen_0_0_2_r2_syntax_error_20250309224847.py",
+      "path": ".adaptagen_versions\\adaptagen_0_0_2_r2_syntax_error_20250309224847.py"
+    },
+    {
+      "version": "0.0.2-r1",
+      "timestamp": "20250309225027",
+      "hash": "a5e8c172e70435efae9d9ccc8a9ae401ccec3756b412fd91c0e385348e4c40c1",
+      "filename": "adaptagen_0_0_2_r1_20250309225027.py",
+      "path": ".adaptagen_versions\\adaptagen_0_0_2_r1_20250309225027.py"
+    },
+    {
+      "version": "0.0.2-r1",
+      "timestamp": "20250309225315",
+      "hash": "a5e8c172e70435efae9d9ccc8a9ae401ccec3756b412fd91c0e385348e4c40c1",
+      "filename": "adaptagen_0_0_2_r1_20250309225315.py",
+      "path": ".adaptagen_versions\\adaptagen_0_0_2_r1_20250309225315.py"
+    },
+    {
+      "version": "0.0.2-r1",
+      "timestamp": "20250309225337",
+      "hash": "a5e8c172e70435efae9d9ccc8a9ae401ccec3756b412fd91c0e385348e4c40c1",
+      "filename": "adaptagen_0_0_2_r1_20250309225337.py",
+      "path": ".adaptagen_versions\\adaptagen_0_0_2_r1_20250309225337.py"
+    },
+    {
+      "version": "0.0.2-r2",
+      "timestamp": "20250309230157",
+      "hash": "e3ce1bee51f9b9d6cbe8d7695e403dacdc1b5682b98e61eabc8d9f4a2c5ff112",
+      "filename": "adaptagen_0_0_2_r2_20250309230157.py",
+      "path": ".adaptagen_versions\\adaptagen_0_0_2_r2_20250309230157.py"
+    },
+    {
+      "version": "0.0.2-r2",
+      "timestamp": "20250309230411",
+      "hash": "de8c7ea5d6e90567047cbd8f7c587ae6",
+      "filename": "adaptagen_0_0_2_r2_20250309230411.py",
+      "path": ".adaptagen_versions\\adaptagen_0_0_2_r2_20250309230411.py"
+    },
+    {
+      "version": "0.0.2-r1",
+      "timestamp": "20250309230422",
+      "hash": "5ed0c5e8afec2e07e6534776298a0eeefd8dadae8d28b10f3575f26b67126a4c",
+      "filename": "adaptagen_0_0_2_r1_20250309230422.py",
+      "path": ".adaptagen_versions\\adaptagen_0_0_2_r1_20250309230422.py"
+    },
+    {
+      "version": "0.0.2-r2-retry1_syntax_error",
+      "timestamp": "20250309230451",
+      "hash": "e44f349868ddb8afaf8cdac9cd0f0c93f5b5109091aff3feaf56e09bc2e91a81",
+      "filename": "adaptagen_0_0_2_r2_retry1_syntax_error_20250309230451.py",
+      "path": ".adaptagen_versions\\adaptagen_0_0_2_r2_retry1_syntax_error_20250309230451.py"
+    },
+    {
+      "version": "0.0.2-r2",
+      "timestamp": "20250309230529",
+      "hash": "de8c7ea5d6e90567047cbd8f7c587ae6",
+      "filename": "adaptagen_0_0_2_r2_20250309230529.py",
+      "path": ".adaptagen_versions\\adaptagen_0_0_2_r2_20250309230529.py"
+    },
+    {
+      "version": "0.0.2-r3-retry1_syntax_error",
+      "timestamp": "20250309230608",
+      "hash": "5e80fb9365441f8c7f02ad9cc0666489",
+      "filename": "adaptagen_0_0_2_r3_retry1_syntax_error_20250309230608.py",
+      "path": ".adaptagen_versions\\adaptagen_0_0_2_r3_retry1_syntax_error_20250309230608.py"
+    },
+    {
+      "version": "0.0.2-r3-retry2_syntax_error",
+      "timestamp": "20250309230645",
+      "hash": "202af02c9adb25eb4435fc30954a4fdf",
+      "filename": "adaptagen_0_0_2_r3_retry2_syntax_error_20250309230645.py",
+      "path": ".adaptagen_versions\\adaptagen_0_0_2_r3_retry2_syntax_error_20250309230645.py"
+    },
+    {
+      "version": "0.0.2-r1",
+      "timestamp": "20250309231538",
+      "hash": "5ed0c5e8afec2e07e6534776298a0eeefd8dadae8d28b10f3575f26b67126a4c",
+      "filename": "adaptagen_0_0_2_r1_20250309231538.py",
+      "path": ".adaptagen_versions\\adaptagen_0_0_2_r1_20250309231538.py"
+    },
+    {
+      "version": "0.0.2-r2",
+      "timestamp": "20250309231621",
+      "hash": "1f391ff2fb511e3c310ed32eb383b7b1",
+      "filename": "adaptagen_0_0_2_r2_20250309231621.py",
+      "path": ".adaptagen_versions\\adaptagen_0_0_2_r2_20250309231621.py"
+    },
+    {
+      "version": "0.0.2-r2",
+      "timestamp": "20250309231735",
+      "hash": "499fbf47ed5caf24ea27477a5da5da16",
+      "filename": "adaptagen_0_0_2_r2_20250309231735.py",
+      "path": ".adaptagen_versions\\adaptagen_0_0_2_r2_20250309231735.py"
+    },
+    {
+      "version": "0.0.2-r1",
+      "timestamp": "20250309232259",
+      "hash": "5ed0c5e8afec2e07e6534776298a0eeefd8dadae8d28b10f3575f26b67126a4c",
+      "filename": "adaptagen_0_0_2_r1_20250309232259.py",
+      "path": ".adaptagen_versions\\adaptagen_0_0_2_r1_20250309232259.py"
+    },
+    {
+      "version": "0.0.2-r2",
+      "timestamp": "20250309233250",
+      "hash": "499fbf47ed5caf24ea27477a5da5da16",
+      "filename": "adaptagen_0_0_2_r2_20250309233250.py",
+      "path": ".adaptagen_versions\\adaptagen_0_0_2_r2_20250309233250.py"
+    },
+    {
+      "version": "0.0.2-r2",
+      "timestamp": "20250309233346",
+      "hash": "499fbf47ed5caf24ea27477a5da5da16",
+      "filename": "adaptagen_0_0_2_r2_20250309233346.py",
+      "path": ".adaptagen_versions\\adaptagen_0_0_2_r2_20250309233346.py"
+    },
+    {
+      "version": "0.0.2-r2",
+      "timestamp": "20250309233618",
+      "hash": "802d173fa5c9869a81d847b2e9442e12",
+      "filename": "adaptagen_0_0_2_r2_20250309233618.py",
+      "path": ".adaptagen_versions\\adaptagen_0_0_2_r2_20250309233618.py"
     }
   ],
   "latest_version": {
-    "version": "0.0.2-r2-syntax_error",
-    "timestamp": "20250309224413",
-    "hash": "65fd1fb08857b64807174ad63aab5a5b4cabb0c558a7d488e8e6879a09395b27",
-    "filename": "adaptagen_0_0_2_r2_syntax_error_20250309224413.py",
-    "path": ".adaptagen_versions\\adaptagen_0_0_2_r2_syntax_error_20250309224413.py"
+    "version": "0.0.2-r2",
+    "timestamp": "20250309233618",
+    "hash": "802d173fa5c9869a81d847b2e9442e12",
+    "filename": "adaptagen_0_0_2_r2_20250309233618.py",
+    "path": ".adaptagen_versions\\adaptagen_0_0_2_r2_20250309233618.py"
   }
 }
