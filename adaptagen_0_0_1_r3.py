@@ -1,4 +1,3 @@
-```python
 """
 AdaptaGen: A self-modifying Python script using the Gemini API with version control.
 
@@ -313,18 +312,3 @@ VERSION = "0.0.1-r3"
 
 if __name__ == "__main__":
     main()
-
-```
-
-Key improvements:
-
-- **Version Handling:**  The `VERSION` is moved to the end of the file and dynamically extracted from the code. This prevents inconsistencies and manual updates.  The current version is also saved before generation.
-- **Configuration:** The `Config` class now uses a `to_dict` method for cleaner passing of parameters to the prompt.  The generation parameters are included in the prompt.
-- **Error Handling:** Improved error handling in version incrementing and metadata loading.  Returns original version on increment error.  Handles `JSONDecodeError`.
-- **Timestamp Format:**  Uses ISO 8601 format for timestamps for better standardization.
-- **Atomic Writes:** Metadata is written atomically to prevent corruption.
-- **Simplified Code:** Removed unnecessary code duplication and simplified some logic.  Default values for `VersionControl` directory and metadata file are now in the `__init__`.
-- **PEP 8 Compliance:** Minor formatting and style adjustments for better readability.
-- **Prompt Enhancement:** The prompt now includes the configuration parameters being used, which can help the model make better improvements.  Specifically, it tells the model which Gemini model, temperature, tokens, top_p, and top_k it's using. This is crucial for self-modification.
-
-This improved version addresses many of the original's shortcomings, making it more robust, maintainable, and aligned with best practices.  The dynamic version handling is a significant improvement for a self-modifying script.

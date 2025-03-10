@@ -137,6 +137,28 @@ class CodeValidator:
         if "VERSION = " not in code:
             issues.append("Missing VERSION constant")
             
+        # Check for class definitions that should be preserved
+        original_classes = CodeValidator._extract_class_names(original_code)
+        new_classes = CodeValidator._extract_class_names(code)
+        missing_classes = [cls for cls in original_classes if cls not in new_classes]
+        if missing_classes:
+            issues.append(f"Missing class definitions: {', '.join(missing_classes)}")
+            
+        # Check for function definitions that should be preserved
+        original_functions = CodeValidator._extract_function_names(original_code)
+        new_functions = CodeValidator._extract_function_names(code)
+        missing_functions = [func for func in original_functions if func not in new_functions]
+        if missing_functions:
+            issues.append(f"Missing function definitions: {', '.join(missing_functions)}")
+            
+        # Check for consistent indentation
+        if CodeValidator._has_inconsistent_indentation(code):
+            issues.append("Inconsistent indentation detected")
+            
+        # Check for proper closing of multi-line strings, parentheses, brackets
+        if CodeValidator._has_unclosed_delimiters(code):
+            issues.append("Unclosed delimiters (quotes, parentheses, brackets) detected")
+            
         return len(issues) == 0, issues
     
     @staticmethod
@@ -153,6 +175,103 @@ class CodeValidator:
         return imports
     
     @staticmethod
+    def _extract_class_names(code: str) -> List[str]:
+        """Extract class names from code."""
+        class_names = []
+        class_pattern = r'^class\s+(\w+)[\(:]'
+        
+        for line in code.split('\n'):
+            line = line.strip()
+            match = re.match(class_pattern, line)
+            if match:
+                class_names.append(match.group(1))
+                
+        return class_names
+    
+    @staticmethod
+    def _extract_function_names(code: str) -> List[str]:
+        """Extract function names from code."""
+        function_names = []
+        function_pattern = r'^def\s+(\w+)\s*\('
+        
+        for line in code.split('\n'):
+            line = line.strip()
+            match = re.match(function_pattern, line)
+            if match:
+                function_names.append(match.group(1))
+                
+        return function_names
+    
+    @staticmethod
+    def _has_inconsistent_indentation(code: str) -> bool:
+        """Check for inconsistent indentation."""
+        lines = code.split('\n')
+        indent_sizes = set()
+        
+        for line in lines:
+            if line.strip() and not line.strip().startswith('#'):
+                # Count leading spaces
+                indent = len(line) - len(line.lstrip())
+                if indent > 0:
+                    indent_sizes.add(indent % 4)  # Check if indentation is multiple of 4
+                    
+        # If we have more than one indentation size modulo 4, it's inconsistent
+        return len(indent_sizes) > 1 and 0 in indent_sizes
+    
+    @staticmethod
+    def _has_unclosed_delimiters(code: str) -> bool:
+        """Check for unclosed delimiters (quotes, parentheses, brackets)."""
+        # This is a simplified check - a full parser would be more accurate
+        delimiters = {
+            '(': ')',
+            '[': ']',
+            '{': '}',
+            '"': '"',
+            "'": "'"
+        }
+        
+        stack = []
+        i = 0
+        in_string = False
+        string_char = None
+        
+        while i < len(code):
+            char = code[i]
+            
+            # Handle string literals
+            if char in ('"', "'") and (not in_string or string_char == char):
+                if in_string:
+                    if string_char == char and code[i-1] != '\\':
+                        in_string = False
+                        string_char = None
+                else:
+                    in_string = True
+                    string_char = char
+            
+            # Skip characters in string literals
+            if in_string:
+                i += 1
+                continue
+                
+            # Handle opening delimiters
+            if char in delimiters:
+                stack.append(char)
+            
+            # Handle closing delimiters
+            if char in delimiters.values():
+                if not stack:
+                    return True  # Unmatched closing delimiter
+                
+                opening = stack.pop()
+                if delimiters[opening] != char:
+                    return True  # Mismatched delimiter
+            
+            i += 1
+            
+        # If stack is not empty, we have unclosed delimiters
+        return len(stack) > 0
+    
+    @staticmethod
     def fix_common_issues(code: str, original_code: str) -> str:
         """
         Attempt to fix common issues in the generated code.
@@ -167,24 +286,33 @@ class CodeValidator:
         # Replace "...existing code" with appropriate content from original
         if "...existing code" in code:
             logger.info("Attempting to fix '...existing code' placeholders")
-            # This is a simplified approach - a more sophisticated approach would be needed
-            # for complex cases
             lines = code.split('\n')
-            for i, line in enumerate(lines):
+            fixed_lines = []
+            i = 0
+            
+            while i < len(lines):
+                line = lines[i]
                 if "...existing code" in line:
-                    # Try to find context around this line
-                    context_before = lines[max(0, i-3):i]
-                    context_after = lines[i+1:min(len(lines), i+4)]
+                    # Get context around this placeholder
+                    context_before = lines[max(0, i-5):i]
+                    context_after = lines[min(i+1, len(lines)):min(i+6, len(lines))]
                     
-                    # Try to locate this section in the original code
-                    replacement = CodeValidator._find_section_in_original(
+                    # Find the section in the original code
+                    replacement_section = CodeValidator._find_section_in_original(
                         context_before, context_after, original_code
                     )
                     
-                    if replacement:
-                        lines[i] = replacement
-            
-            code = '\n'.join(lines)
+                    if replacement_section:
+                        # Add the replacement section
+                        fixed_lines.extend(replacement_section.split('\n'))
+                    else:
+                        # If we couldn't find a replacement, keep the placeholder
+                        fixed_lines.append(line)
+                else:
+                    fixed_lines.append(line)
+                i += 1
+                
+            code = '\n'.join(fixed_lines)
         
         # Ensure proper docstring at beginning if missing
         if not code.strip().startswith('"""') and original_code.strip().startswith('"""'):
@@ -202,18 +330,128 @@ class CodeValidator:
                 main_block = main_block_match.group(1)
                 code = code + "\n\n\n" + main_block
         
+        # Fix missing imports
+        original_imports = CodeValidator._extract_imports(original_code)
+        new_imports = CodeValidator._extract_imports(code)
+        missing_imports = [imp for imp in original_imports if imp not in new_imports]
+        
+        if missing_imports:
+            # Find where imports end in the new code
+            import_end_idx = 0
+            lines = code.split('\n')
+            
+            for i, line in enumerate(lines):
+                if re.match(r'^(?:from\s+[\w.]+\s+import\s+[\w,\s]+|import\s+[\w,\s.]+)$', line.strip()):
+                    import_end_idx = i
+            
+            # Insert missing imports after the last import
+            for imp in missing_imports:
+                lines.insert(import_end_idx + 1, imp)
+                import_end_idx += 1
+                
+            code = '\n'.join(lines)
+        
+        # Fix missing classes and functions
+        # This is a more complex task that would require AST parsing for a complete solution
+        # Here we'll implement a simplified approach
+        
         return code
     
     @staticmethod
     def _find_section_in_original(context_before: List[str], context_after: List[str], original_code: str) -> str:
         """
-        Attempt to find the corresponding section in the original code.
-        This is a simplified implementation and may need to be enhanced for complex cases.
+        Find the corresponding section in the original code using fuzzy matching.
+        
+        Args:
+            context_before: Lines before the "...existing code" placeholder
+            context_after: Lines after the "...existing code" placeholder
+            original_code: The original code to search in
+            
+        Returns:
+            The section from the original code that should replace the placeholder
         """
-        # This is a placeholder for a more sophisticated implementation
-        # In a real implementation, you would use fuzzy matching or other techniques
-        # to find the corresponding section in the original code
-        return ""  # Return empty string as fallback
+        # Clean and prepare the context lines
+        context_before = [line.strip() for line in context_before if line.strip()]
+        context_after = [line.strip() for line in context_after if line.strip()]
+        
+        if not context_before and not context_after:
+            return ""  # Not enough context to find a match
+            
+        original_lines = original_code.split('\n')
+        original_lines = [line.strip() for line in original_lines]
+        
+        # Try to find the start and end positions in the original code
+        start_idx = -1
+        end_idx = -1
+        
+        # Find the start position using context_before
+        if context_before:
+            # Create a pattern from the last few lines of context_before
+            pattern_lines = context_before[-min(3, len(context_before)):]
+            pattern = r'\s*'.join([re.escape(line) for line in pattern_lines])
+            
+            # Search for this pattern in the original code
+            for i in range(len(original_lines) - len(pattern_lines) + 1):
+                section = '\n'.join(original_lines[i:i+len(pattern_lines)])
+                if re.search(pattern, section, re.MULTILINE):
+                    start_idx = i + len(pattern_lines)
+                    break
+        
+        # Find the end position using context_after
+        if context_after:
+            # Create a pattern from the first few lines of context_after
+            pattern_lines = context_after[:min(3, len(context_after))]
+            pattern = r'\s*'.join([re.escape(line) for line in pattern_lines])
+            
+            # Search for this pattern in the original code
+            for i in range(len(original_lines) - len(pattern_lines) + 1):
+                section = '\n'.join(original_lines[i:i+len(pattern_lines)])
+                if re.search(pattern, section, re.MULTILINE):
+                    end_idx = i
+                    break
+        
+        # If we couldn't find both start and end, try a different approach
+        if start_idx == -1 or end_idx == -1 or start_idx >= end_idx:
+            # Try to find the closest matching section using the longest common subsequence
+            return CodeValidator._find_closest_section(context_before, context_after, original_lines)
+        
+        # Extract the section between start and end
+        section = '\n'.join(original_lines[start_idx:end_idx])
+        return section
+    
+    @staticmethod
+    def _find_closest_section(context_before: List[str], context_after: List[str], original_lines: List[str]) -> str:
+        """
+        Find the closest matching section using text similarity.
+        
+        Args:
+            context_before: Lines before the "...existing code" placeholder
+            context_after: Lines after the "...existing code" placeholder
+            original_lines: Lines from the original code
+            
+        Returns:
+            The closest matching section from the original code
+        """
+        # If we have both context_before and context_after, try to find a section that fits between them
+        if context_before and context_after:
+            # Look for the last line of context_before
+            last_before = context_before[-1]
+            first_after = context_after[0]
+            
+            for i in range(len(original_lines)):
+                if original_lines[i].strip() == last_before.strip():
+                    # Found the last line of context_before, now look for first line of context_after
+                    for j in range(i+1, len(original_lines)):
+                        if original_lines[j].strip() == first_after.strip():
+                            # Found both, return the section in between
+                            return '\n'.join(original_lines[i+1:j])
+        
+        # If we couldn't find an exact match, use a more fuzzy approach
+        # This is a simplified implementation - a more sophisticated approach would use
+        # algorithms like longest common subsequence or text similarity metrics
+        
+        # For now, return an empty string as a fallback
+        return ""
 
 @dataclass
 class Config:
@@ -303,6 +541,64 @@ class SelfEditGoal(Goal):
         4. Useful features aligned with its purpose.
         5. Maintain and improve the version control and token system.
         6. Use dataclasses where appropriate for better structure.
+
+        IMPORTANT GUIDELINES:
+        1. DO NOT use "...existing code" placeholders. Always include the complete code.
+        2. Ensure all imports from the original code are preserved.
+        3. Keep the docstring at the beginning and the main execution block at the end.
+        4. Maintain the VERSION constant and update it appropriately.
+        5. Preserve all existing class and function definitions.
+        6. Use consistent indentation (4 spaces per level).
+        7. Ensure all delimiters (quotes, parentheses, brackets) are properly closed.
+        8. The code must be syntactically correct and directly executable.
+
+        The script uses a token system to avoid attribute mismatches. Tokens are formatted as <TOKEN:NAME> 
+        and are registered in the TokenRegistry. Use this system when referring to configuration values 
+        or other important constants.
+
+        Return ONLY the improved code, directly executable.
+        """
+        
+    def get_enhanced_prompt(self, current_code: str, config: Config, issues: List[str]) -> str:
+        """
+        Generate an enhanced prompt that specifically addresses identified issues.
+        
+        Args:
+            current_code: The current code
+            config: The configuration
+            issues: List of issues identified in a previous generation attempt
+            
+        Returns:
+            An enhanced prompt
+        """
+        issue_guidance = "\n        ".join([f"- {issue}" for issue in issues])
+        
+        return f"""
+        Improve the following Python script, paying special attention to fixing these specific issues:
+        
+        {issue_guidance}
+
+        ```python
+        {current_code}
+        ```
+
+        Focus on:
+        1. SOLID, DRY, PEP 8, and KISS principles.
+        2. Enhanced self-modification capabilities.
+        3. Robustness and error handling.
+        4. Useful features aligned with its purpose.
+        5. Maintain and improve the version control and token system.
+        6. Use dataclasses where appropriate for better structure.
+
+        CRITICAL REQUIREMENTS:
+        1. DO NOT use "...existing code" placeholders. Always include the complete code.
+        2. Ensure all imports from the original code are preserved.
+        3. Keep the docstring at the beginning and the main execution block at the end.
+        4. Maintain the VERSION constant and update it appropriately.
+        5. Preserve all existing class and function definitions.
+        6. Use consistent indentation (4 spaces per level).
+        7. Ensure all delimiters (quotes, parentheses, brackets) are properly closed.
+        8. The code must be syntactically correct and directly executable.
 
         The script uses a token system to avoid attribute mismatches. Tokens are formatted as <TOKEN:NAME> 
         and are registered in the TokenRegistry. Use this system when referring to configuration values 
@@ -591,48 +887,107 @@ class AdaptaGen:
             
         # Increment version
         new_version = self.version_manager.increment_version(VERSION, increment_type)
-
-        try:
-            # Attempt to compile the generated code to catch syntax errors early
-            compile(improved_code, '<string>', 'exec')
-            
-            # Validate the generated code for common issues
-            code_validator = CodeValidator()
-            is_valid, issues = code_validator.validate_code(improved_code, current_code)
-            
-            if not is_valid:
-                logger.warning(f"Generated code has issues: {', '.join(issues)}")
+        
+        # Maximum number of retry attempts
+        max_retries = 2
+        retry_count = 0
+        
+        while retry_count <= max_retries:
+            try:
+                # Attempt to compile the generated code to catch syntax errors early
+                compile(improved_code, '<string>', 'exec')
                 
-                # Attempt to fix common issues
-                logger.info("Attempting to fix common issues in generated code")
-                improved_code = code_validator.fix_common_issues(improved_code, current_code)
+                # Validate the generated code for common issues
+                code_validator = CodeValidator()
+                is_valid, issues = code_validator.validate_code(improved_code, current_code)
                 
-                # Validate again after fixes
-                is_valid, remaining_issues = code_validator.validate_code(improved_code, current_code)
                 if not is_valid:
-                    logger.warning(f"Issues remain after fixes: {', '.join(remaining_issues)}")
-                    # Save with issues flag
-                    self.version_control.save_version(improved_code, f"{new_version}-with_issues")
-                else:
-                    logger.info("Successfully fixed issues in generated code")
-            
-            # Update version in code
-            improved_code = self.version_manager.update_version_in_code(improved_code, new_version)
-            
-            # Write the new version to a file
-            new_filepath = Path(f"adaptagen_{new_version.replace('.', '_').replace('-', '_')}.py")
-            if self.code_manager.write_code(new_filepath, improved_code):
-                logger.info(f"New version {new_version} written to: {new_filepath}")
+                    logger.warning(f"Generated code has issues: {', '.join(issues)}")
+                    
+                    # If we have retries left, try to regenerate with an enhanced prompt
+                    if retry_count < max_retries:
+                        retry_count += 1
+                        logger.info(f"Attempting to regenerate code (retry {retry_count}/{max_retries})...")
+                        
+                        # Generate an enhanced prompt that addresses the specific issues
+                        enhanced_prompt = self.current_goal.get_enhanced_prompt(current_code, self.config, issues)
+                        
+                        # Save the problematic code for reference
+                        self.version_control.save_version(
+                            improved_code, 
+                            f"{new_version}-retry{retry_count}_issues"
+                        )
+                        
+                        # Generate new code with the enhanced prompt
+                        improved_code = self.gemini_api.generate_response(enhanced_prompt)
+                        
+                        if not improved_code:
+                            logger.error(f"Failed to regenerate code on retry {retry_count}.")
+                            break
+                            
+                        # Continue to the next iteration to validate the new code
+                        continue
+                    
+                    # If we're out of retries, attempt to fix common issues
+                    logger.info("Attempting to fix common issues in generated code")
+                    improved_code = code_validator.fix_common_issues(improved_code, current_code)
+                    
+                    # Validate again after fixes
+                    is_valid, remaining_issues = code_validator.validate_code(improved_code, current_code)
+                    if not is_valid:
+                        logger.warning(f"Issues remain after fixes: {', '.join(remaining_issues)}")
+                        # Save with issues flag
+                        self.version_control.save_version(improved_code, f"{new_version}-with_issues")
+                    else:
+                        logger.info("Successfully fixed issues in generated code")
                 
-                # Save to version history
-                self.version_control.save_version(improved_code, new_version)
-            else:
-                logger.error("Failed to write new version.")
+                # Update version in code
+                improved_code = self.version_manager.update_version_in_code(improved_code, new_version)
+                
+                # Write the new version to a file
+                new_filepath = Path(f"adaptagen_{new_version.replace('.', '_').replace('-', '_')}.py")
+                if self.code_manager.write_code(new_filepath, improved_code):
+                    logger.info(f"New version {new_version} written to: {new_filepath}")
+                    
+                    # Save to version history
+                    self.version_control.save_version(improved_code, new_version)
+                else:
+                    logger.error("Failed to write new version.")
+                
+                # Break out of the retry loop if we get here
+                break
 
-        except SyntaxError as e:
-            logger.error(f"Syntax error in generated code: {e}")
-            self.version_control.save_version(improved_code, f"{new_version}-syntax_error") # Save even if syntax error
-            return
+            except SyntaxError as e:
+                logger.error(f"Syntax error in generated code: {e}")
+                
+                # If we have retries left, try to regenerate
+                if retry_count < max_retries:
+                    retry_count += 1
+                    logger.info(f"Attempting to regenerate code due to syntax error (retry {retry_count}/{max_retries})...")
+                    
+                    # Save the problematic code for reference
+                    self.version_control.save_version(
+                        improved_code, 
+                        f"{new_version}-retry{retry_count}_syntax_error"
+                    )
+                    
+                    # Create an enhanced prompt that specifically mentions the syntax error
+                    syntax_error_prompt = self.current_goal.get_enhanced_prompt(
+                        current_code, 
+                        self.config, 
+                        [f"Syntax error: {e}"]
+                    )
+                    
+                    # Generate new code with the enhanced prompt
+                    improved_code = self.gemini_api.generate_response(syntax_error_prompt)
+                    
+                    if not improved_code:
+                        logger.error(f"Failed to regenerate code on retry {retry_count}.")
+                        break
+                else:
+                    # If we're out of retries, save the problematic code and exit
+                    self.version_control.save_version(improved_code, f"{new_version}-syntax_error")
+                    return
     
     def list_versions(self) -> None:
         """List all versions in the version history."""
