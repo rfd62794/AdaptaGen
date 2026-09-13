@@ -20,8 +20,8 @@ AdaptaGen is a Python-based AI agent that can modify and improve its own code. I
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/adaptagen.git
-cd adaptagen
+git clone https://github.com/rfd62794/AdaptaGen.git
+cd AdaptaGen
 
 # Install the package
 pip install -e .
